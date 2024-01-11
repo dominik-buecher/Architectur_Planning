@@ -35,9 +35,9 @@ class GridWindow:
 
     def create_mower(self):
         self.mower = tk.Canvas(self.root, width=20, height=20, bg="red", highlightthickness=0)
-        self.mower.grid(row=0, column=0)  # Startet im oberen linken Eck
+        self.mower.grid(row=0, column=0)  
         self.mower_direction = "right"
-        self.cells[0][0]["bg"] = "#006400"  # Startfeld auf dunkelgrün setzten
+        self.cells[0][0]["bg"] = "#006400" 
 
     def create_target(self):
         target_row = self.rows - 1
@@ -102,7 +102,7 @@ class GridWindow:
         if not any(c["cow"].grid_info()["row"] == new_row and c["cow"].grid_info()["column"] == new_col for c in self.cows):
             self.mower.grid(row=new_row, column=new_col)
             if self.cells[new_row][new_col]["bg"] == "green":
-                self.cells[new_row][new_col]["bg"] = "#006400"  # Dunkelgrün
+                self.cells[new_row][new_col]["bg"] = "#006400"
 
 def main():
     root = tk.Tk()
@@ -121,7 +121,7 @@ def main():
 
     def update():
         grid_window.move_cows()
-        root.after(500, update)  # Update alle 500 Millisekunden
+        root.after(500, update) 
 
     update()
 
