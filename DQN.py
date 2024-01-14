@@ -4,6 +4,8 @@ import torch.optim as optim
 import torch.nn.functional as F
 import random
 import numpy as np
+import tkinter as tk
+from window import GridWindow
 
 class DQN(nn.Module):
     def __init__(self, input_size, output_size):
@@ -75,11 +77,16 @@ class Agent:
         self.optimizer.step()
 
 # Beispiel für die Verwendung:
-env = YourCustomEnvironment(rows=20, cols=20, num_cows=5)  # Du musst deine eigene Umgebung erstellen
+env = GridWindow(root = tk.Tk(), rows=20, cols=20, num_cows=5)  # Du musst deine eigene Umgebung erstellen
 input_size = env.observation_space.shape[0]  # Anzahl der Merkmale im Zustand
 output_size = env.action_space.n  # Anzahl der Aktionen
 
 agent = Agent(input_size, output_size)
+
+NUM_EPISODES = 50
+TARGET_UPDATE = 10
+BATCH_SIZE = 32
+
 
 for episode in range(NUM_EPISODES):
     state = env.reset()

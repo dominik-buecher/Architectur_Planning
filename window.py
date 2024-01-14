@@ -104,6 +104,54 @@ class GridWindow:
             if self.cells[new_row][new_col]["bg"] == "green":
                 self.cells[new_row][new_col]["bg"] = "#006400"
 
+
+def get_state(self):
+    state = []
+
+    # Füge Positionen des Rasenmähers, der Kühe und des Ziels hinzu
+    state.extend([self.mower.grid_info()["row"], self.mower.grid_info()["column"]])
+    for cow in self.cows:
+        state.extend([cow["cow"].grid_info()["row"], cow["cow"].grid_info()["column"]])
+    state.extend([self.target.grid_info()["row"], self.target.grid_info()["column"]])
+
+    # Füge den Besuchsstatus der Felder hinzu
+    for row in range(self.rows):
+        for col in range(self.cols):
+            if self.cells[row][col]["bg"] == "#006400":
+                state.append(1)  # Besucht
+            else:
+                state.append(0)  # Nicht besucht
+
+    return state
+
+def get_future_state(current_state, action):
+    # Define the transition rules based on the chosen action
+    row, col = current_state // n_cols, current_state % n_cols
+
+    if action == 0:  # Move Up
+        row = row - 1
+    elif action == 1:  # Move Down
+        row = row + 1
+    elif action == 2:  # Move Left
+        col = col - 1
+    elif action == 3:  # Move Right
+        col = col + 1
+
+    return row, col 
+
+
+
+def get_reward(self):
+
+    row_mower = self.mower.grid_info()["row"]
+    column_mower =  self.mower.grid_info()["column"]
+
+    if row_mower == 
+
+
+    return reward
+
+
 def main():
     root = tk.Tk()
     root.title("Grid Window with Cows, Mower, and Target")
