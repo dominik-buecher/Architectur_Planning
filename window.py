@@ -143,6 +143,7 @@ class GridWindow:
             col = col + 1
             col = min(self.cols - 1, col)
 
+        # return row, col 
         return row, col 
 
 

@@ -8,12 +8,6 @@ import numpy as np
 import tkinter as tk
 from window import *
 
-# Define the environment
-n_rows = 3
-n_cols = 3
-n_states = n_rows * n_cols
-n_actions = 4 
-actions = ['Up', 'Down', 'Left', 'Right']
 
 # Define the action-to-index dictionary
 index_to_action = {0: 'Up', 1: 'Down', 2:'Left', 3: 'Right'}
@@ -21,9 +15,16 @@ index_to_action = {0: 'Up', 1: 'Down', 2:'Left', 3: 'Right'}
 root = tk.Tk()
 root.title("Grid Window with Cows, Mower, and Target")
 
+# Define the environment
 rows = 20
 cols = 20
 num_cows = 5
+
+n_rows = rows
+n_cols = cols
+n_states = n_rows * n_cols
+n_actions = 4 
+actions = ['Up', 'Down', 'Left', 'Right']
 
 grid_window = GridWindow(root, rows, cols, num_cows)
 
@@ -37,12 +38,6 @@ class DQN(nn.Module):
     def forward(self, x):
         x = F.relu(self.fc1(x.view(-1, self.fc1.in_features)))
         return self.fc2(x)
-
-# Define rewards and penalties
-rewards = np.zeros(n_states)
-rewards[2] = -1
-rewards[4] = -1
-rewards[8] = 1  # Goal state
 
 # DQN parameters
 gamma = 1  # Discount factor
@@ -62,6 +57,7 @@ replay_memory = []
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward', 'done'))
 
 # Initialize DQN and target DQN
+# input_size = 414  # Only the state index
 input_size = 1  # Only the state index
 output_size = n_actions
 dqn = DQN(input_size, output_size)
@@ -92,6 +88,11 @@ def epsilon_greedy_action(state, epsilon):
         state_tensor = torch.tensor([state], dtype=torch.float32)  # Wrap the state in a tensor
         q_values = dqn(state_tensor)
         max_action = q_values.argmax().item()
+        print("q_values.shape = ", q_values.shape)
+        print("q_values", q_values)
+        print(max_action)
+        assert(max_action >= 0 and max_action <= 3)
+
         next_row, next_col = calculate_next_state(max_action)
         if next_row < 0 or next_row >= n_rows or next_col < 0 or next_col >= n_cols:
             while True:
@@ -101,6 +102,7 @@ def epsilon_greedy_action(state, epsilon):
                     break
         else:
             action = max_action
+    assert(action >= 0 and action <= 3)
     return action
 
 # DQN training loop
@@ -112,8 +114,11 @@ for episode in range(max_episodes):
     step_count = 0
 
     while not done:
-        state = grid_window.get_state()
+        state = grid_window.get_state() # list [414]
+        assert(len(state) == 414)
         action = epsilon_greedy_action(state, epsilon)
+
+
         
         #print(state, index_to_action[action])
         
@@ -134,17 +139,25 @@ for episode in range(max_episodes):
         if len(replay_memory) > batch_size:
             transitions = random.sample(replay_memory, batch_size)
             state_batch = torch.tensor([t.state for t in transitions], dtype=torch.float32)
+            print("state_batch = ", state_batch.shape)
             action_batch = torch.tensor([t.action for t in transitions], dtype=torch.int64).unsqueeze(1)
+            print("action_batch = ", action_batch.shape)
             reward_batch = torch.tensor([t.reward for t in transitions], dtype=torch.float32)
+            print("reward_batch = ", reward_batch.shape)
             next_state_batch = torch.tensor([t.next_state for t in transitions], dtype=torch.float32)
+            print("next_state_batch = ", next_state_batch.shape)
             done_batch = torch.tensor([t.done for t in transitions], dtype=torch.float32)
 
             # Calculate Q-values for current and next states
             q_values = dqn(state_batch)
-            print("action_batch: ", action_batch)
+            # print("action_batch: ", action_batch)
             q_values = q_values.gather(1, action_batch)
             next_q_values = target_dqn(next_state_batch).max(1)[0].detach()
+            print("reward_batch.shape      => ", reward_batch.shape          )
+            print("done_batch.shape        => ", done_batch.shape            )
+            print("next_q_values.shape     => ", next_q_values.shape         )
             expected_q_values = reward_batch + gamma * (1 - done_batch) * next_q_values
+            print("expected_q_values.shape => ", expected_q_values.shape     )
 
             # Compute loss and update DQN
             loss = loss_fn(q_values, expected_q_values.unsqueeze(1))
