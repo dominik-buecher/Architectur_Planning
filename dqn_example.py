@@ -5,6 +5,8 @@ import torch.nn.functional as F
 import random
 from collections import namedtuple
 import numpy as np
+import tkinter as tk
+from window import *
 
 # Define the environment
 n_rows = 3
@@ -15,6 +17,16 @@ actions = ['Up', 'Down', 'Left', 'Right']
 
 # Define the action-to-index dictionary
 index_to_action = {0: 'Up', 1: 'Down', 2:'Left', 3: 'Right'}
+
+root = tk.Tk()
+root.title("Grid Window with Cows, Mower, and Target")
+
+rows = 20
+cols = 20
+num_cows = 5
+
+grid_window = GridWindow(root, rows, cols, num_cows)
+
 
 class DQN(nn.Module):
     def __init__(self, input_size, output_size):
@@ -61,18 +73,10 @@ target_dqn.eval()
 optimizer = optim.Adam(dqn.parameters(), lr=0.001)
 loss_fn = nn.MSELoss()
 
-def calculate_next_state(current_state, action):
-    # Define the transition rules based on the chosen action
-    row, col = current_state // n_cols, current_state % n_cols
-
-    if action == 0:  # Move Up
-        row = row - 1
-    elif action == 1:  # Move Down
-        row = row + 1
-    elif action == 2:  # Move Left
-        col = col - 1
-    elif action == 3:  # Move Right
-        col = col + 1
+def calculate_next_state(action):
+    
+    state = grid_window.get_state()
+    row, col = grid_window.get_future_state(state, action)
 
     return row, col 
 
@@ -81,18 +85,18 @@ def epsilon_greedy_action(state, epsilon):
     if random.uniform(0, 1) < epsilon:
         while True:
             action = random.randint(0, n_actions - 1)
-            next_row, next_col = calculate_next_state(state, action)
+            next_row, next_col = calculate_next_state(action)
             if not (next_row < 0 or next_row >= n_rows or next_col < 0 or next_col >= n_cols):
                 break
     else:
         state_tensor = torch.tensor([state], dtype=torch.float32)  # Wrap the state in a tensor
         q_values = dqn(state_tensor)
         max_action = q_values.argmax().item()
-        next_row, next_col = calculate_next_state(state, max_action)
+        next_row, next_col = calculate_next_state(max_action)
         if next_row < 0 or next_row >= n_rows or next_col < 0 or next_col >= n_cols:
             while True:
                 action = random.randint(0, n_actions - 1)
-                next_row, next_col = calculate_next_state(state, action)
+                next_row, next_col = calculate_next_state(action)
                 if not (next_row < 0 or next_row >= n_rows or next_col < 0 or next_col >= n_cols):
                     break
         else:
@@ -108,15 +112,16 @@ for episode in range(max_episodes):
     step_count = 0
 
     while not done:
-        state = row * n_cols + col
+        state = grid_window.get_state()
         action = epsilon_greedy_action(state, epsilon)
+        
         #print(state, index_to_action[action])
         
         # Simulate environment (transition to next state and get reward)
-        next_row, next_col = calculate_next_state(state, action)
+        next_row, next_col = calculate_next_state(action)
         next_state = next_row * n_cols + next_col
-        reward = rewards[next_state]
-        done = True if reward == 10 else False  # Check if goal reached
+        reward = grid_window.get_reward(state, next_row, next_col)
+        done = True if reward == 50 else False  # Check if goal reached
         total_reward += reward
         
         # Store transition in replay memory
@@ -136,6 +141,7 @@ for episode in range(max_episodes):
 
             # Calculate Q-values for current and next states
             q_values = dqn(state_batch)
+            print("action_batch: ", action_batch)
             q_values = q_values.gather(1, action_batch)
             next_q_values = target_dqn(next_state_batch).max(1)[0].detach()
             expected_q_values = reward_batch + gamma * (1 - done_batch) * next_q_values
@@ -170,12 +176,12 @@ step_count = 0
 while not done:
     q_values = dqn(torch.tensor([state], dtype=torch.float32))
     action = q_values.argmax().item()
-    next_row, next_col = calculate_next_state(state, action)
+    next_row, next_col = calculate_next_state(action)
     action = torch.topk(q_values, 2).indices[0, 1].item() if next_row < 0 or next_row >= n_rows or next_col < 0 or next_col >= n_cols else action
     generated_actions.append(index_to_action[action])
     print(state, index_to_action[action])
 
-    next_row, next_col = calculate_next_state(state, action)
+    next_row, next_col = calculate_next_state(action)
     next_state = next_row * n_cols + next_col
     
     done = True if next_state == 8 else False  # Check if goal reached

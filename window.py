@@ -105,52 +105,100 @@ class GridWindow:
                 self.cells[new_row][new_col]["bg"] = "#006400"
 
 
-def get_state(self):
-    state = []
+    def get_state(self):
+        state = []
 
-    # Füge Positionen des Rasenmähers, der Kühe und des Ziels hinzu
-    state.extend([self.mower.grid_info()["row"], self.mower.grid_info()["column"]])
-    for cow in self.cows:
-        state.extend([cow["cow"].grid_info()["row"], cow["cow"].grid_info()["column"]])
-    state.extend([self.target.grid_info()["row"], self.target.grid_info()["column"]])
+        # Füge Positionen des Rasenmähers, der Kühe und des Ziels hinzu
+        state.extend([self.mower.grid_info()["row"], self.mower.grid_info()["column"]])
+        for cow in self.cows:
+            state.extend([cow["cow"].grid_info()["row"], cow["cow"].grid_info()["column"]])
+        state.extend([self.target.grid_info()["row"], self.target.grid_info()["column"]])
 
-    # Füge den Besuchsstatus der Felder hinzu
-    for row in range(self.rows):
-        for col in range(self.cols):
-            if self.cells[row][col]["bg"] == "#006400":
-                state.append(1)  # Besucht
-            else:
-                state.append(0)  # Nicht besucht
-
-    return state
-
-def get_future_state(current_state, action):
-    # Define the transition rules based on the chosen action
-    row, col = current_state // n_cols, current_state % n_cols
-
-    if action == 0:  # Move Up
-        row = row - 1
-    elif action == 1:  # Move Down
-        row = row + 1
-    elif action == 2:  # Move Left
-        col = col - 1
-    elif action == 3:  # Move Right
-        col = col + 1
-
-    return row, col 
+        # Füge den Besuchsstatus der Felder hinzu
+        for row in range(self.rows):
+            for col in range(self.cols):
+                if self.cells[row][col]["bg"] == "#006400":
+                    state.append(1)  # Besucht
+                else:
+                    state.append(0)  # Nicht besucht
+        return state
 
 
+    def get_future_state(self, current_state, action):
+        # {0: 'Up', 1: 'Down', 2:'Left', 3: 'Right'}
+        
+        row = current_state[0]
+        col = current_state[1]
 
-def get_reward(self):
+        if action == 0:  # Move Up
+            row = row - 1
+            row = max(0, row)
+        elif action == 1:  # Move Down
+            row = row + 1
+            row = min(self.rows - 1, row)
+        elif action == 2:  # Move Left
+            col = col - 1
+            col = max(0, col)
+        elif action == 3:  # Move Right
+            col = col + 1
+            col = min(self.cols - 1, col)
 
-    row_mower = self.mower.grid_info()["row"]
-    column_mower =  self.mower.grid_info()["column"]
-
-    if row_mower == 
+        return row, col 
 
 
-    return reward
 
+    def get_reward(self, state, future_row, future_col):
+        
+        row_cow = []
+        col_cow = []
+
+        row = state[0]
+        col = state[1]
+
+        row_cow.append(state[3])
+        col_cow.append(state[4])
+
+        row_cow.append(state[5])
+        col_cow.append(state[6])
+
+        row_cow.append(state[7])
+        col_cow.append(state[8])
+
+        row_cow.append(state[9])
+        col_cow.append(state[10])
+        # state = [mower_row, mower_col, cow1_row, cow1_col, cow2_row, cow2_col, ..., target_row, target_col, 0, 1, 0, 1, ...]
+
+        if (future_row == row_cow[0] and future_col == col_cow[0]) or (future_row == row_cow[1] and future_col == col_cow[1]) or (future_row == row_cow[2] and future_col == col_cow[2]) or (future_row == row_cow[3] and future_col == col_cow[3]):
+            reward = -5
+
+        visited_status = state[-(self.rows * self.cols):]
+
+        # Überprüfe, ob das Feld an der Position des Rasenmähers besucht wurde
+        if visited_status[future_row * self.cols + future_col] == 1:
+            reward = -1
+        else:
+            reward = 5
+
+        if row == self.target.grid_info()["row"] and col == self.target.grid_info()["column"]:
+
+            alle_besucht = all(state[12:])
+
+            if alle_besucht is True:
+                reward = 50
+
+        return reward
+
+
+
+def is_field_visited(state, rows, cols, mower_row, mower_col):
+    # Extrahiere den Besuchsstatus-Teil des Zustandsvektors
+    visited_status = state[-(rows * cols):]
+
+    # Überprüfe, ob das Feld an der Position des Rasenmähers oder des Ziels bereits besucht wurde
+    if visited_status[mower_row * cols + mower_col] == 1:
+        return True
+
+    return False
 
 def main():
     root = tk.Tk()
