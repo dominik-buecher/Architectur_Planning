@@ -6,24 +6,28 @@ from torchinfo import summary
 import random
 from collections import namedtuple
 import numpy as np
+import tensorflow as tf
+import tensorflow
+from tensorflow import keras
+from tensorflow.keras import layers
+
 
 
 print("GPU support: ", torch.cuda.is_available())
 
-# generate file
-import os
-import os.path
-if not os.path.isdir("./outputs"):
-    os.makedirs("./outputs")
-import time
-import sys
-f = open("./outputs/output_"+time.strftime("%Y%m%d-%H%M%S")+".txt", "w+", encoding="utf8")
-orig_stdout = sys.stdout
-sys.stdout = f
-
-# print script content
-with open(os.path.abspath(__file__), "r") as sc:
-    print(sc.read())
+# # generate logfile
+# import os
+# import os.path
+# if not os.path.isdir("./outputs"):
+#     os.makedirs("./outputs")
+# import time
+# import sys
+# f = open("./outputs/output_"+time.strftime("%Y%m%d-%H%M%S")+".txt", "w+", encoding="utf8")
+# orig_stdout = sys.stdout
+# sys.stdout = f
+# # print script content
+# with open(os.path.abspath(__file__), "r") as sc:
+#     print(sc.read())
 
 # Define the environment
 n_rows = 10
@@ -38,23 +42,14 @@ goal_reward = 100
 # Define the action-to-index dictionary
 index_to_action = {0: 'Up', 1: 'Down', 2:'Left', 3: 'Right'}
 
-class DQN(nn.Module):
-    def __init__(self, input_size, output_size):
-        super(DQN, self).__init__()
-        self.fc1 = nn.Linear(input_size, 128)
-        self.fc2 = nn.Linear(128, 128)
-        self.fc3 = nn.Linear(128, output_size)
+class DQN():
+    def create():
+        inputs = layers.Input(shape=1)
+        layer1 = layers.Dense(128, activation="relu", input_shape=(1,))(inputs)
+        layer2 = layers.Dense(64, activation="relu")(layer1)
+        action = layers.Dense(n_actions, activation="linear")(layer2)
+        return tensorflow.keras.Model(inputs=inputs, outputs=action)
 
-        # works quite well
-        # self.fc1 = nn.Linear(input_size, 128)
-        # self.fc2 = nn.Linear(128, output_size)
-
-    def forward(self, x):
-        x = F.relu(self.fc1(x.view(-1, self.fc1.in_features)))
-        # hidden = self.fc2(x)
-        return self.fc3(x)
-        # x = F.relu(self.fc1(x.view(-1, self.fc1.in_features)))
-        # return self.fc2(x)
 
 # Define rewards and penalties
 rewards = np.zeros((n_rows, n_cols))
@@ -90,15 +85,10 @@ Transition = namedtuple('Transition', ('state_idx', 'action', 'next_state_idx', 
 # Initialize DQN and target DQN
 input_size = 1  # Only the state index
 output_size = n_actions
-dqn = DQN(input_size, output_size)
-target_dqn = DQN(input_size, output_size)
-target_dqn.load_state_dict(dqn.state_dict())
-target_dqn.eval()
-summary(target_dqn)
+dqn = DQN.create()
+target_dqn = DQN.create()
+dqn.summary()
 
-# Define optimizer and loss function
-optimizer = optim.Adam(dqn.parameters(), lr=0.001)
-loss_fn = nn.MSELoss()
 
 def calculate_next_state(current_state, action):
     # Define the transition rules based on the chosen action
@@ -116,36 +106,10 @@ def calculate_next_state(current_state, action):
     elif action == 3:  # Move Right
         col = col + 1
         col = min(col, n_cols-1)
+    else:
+        assert(0)
 
     return row, col 
-
-# # Function to select epsilon-greedy action
-# def epsilon_greedy_action(state, epsilon):
-#     if random.uniform(0, 1) < epsilon:
-#         while True:
-#             action = random.randint(0, n_actions - 1)
-#             next_row, next_col = calculate_next_state(state, action)
-#             if not (next_row < 0 or next_row >= n_rows or next_col < 0 or next_col >= n_cols):
-#                 break
-#     else:
-#         state_tensor = torch.tensor([state], dtype=torch.float32)  # Wrap the state in a tensor
-#         q_values = dqn(state_tensor)
-#         max_action = q_values.argmax().item()
-#         # print("q_values.shape = ", q_values.shape)
-#         # print("q_values", q_values)
-#         # print(max_action)
-#         assert(max_action >= 0 and max_action <= 3)
-
-#         next_row, next_col = calculate_next_state(state, max_action)
-#         if next_row < 0 or next_row >= n_rows or next_col < 0 or next_col >= n_cols:
-#             while True:
-#                 action = random.randint(0, n_actions - 1)
-#                 next_row, next_col = calculate_next_state(state, action)
-#                 if not (next_row < 0 or next_row >= n_rows or next_col < 0 or next_col >= n_cols):
-#                     break
-#         else:
-#             action = max_action
-#     return action
 
 def is_allowed_action(next_row, next_col):
     if next_row >= 0 and next_row < n_rows and next_col >= 0 and next_col < n_cols:
@@ -158,15 +122,17 @@ def epsilon_greedy_action(state, epsilon):
     if random.uniform(0, 1) < epsilon:
         # Take random action
         while True:
-            action = random.randint(0, n_actions - 1)
+            action = np.random.choice(n_actions)
             next_row, next_col = calculate_next_state(state, action)
             if is_allowed_action(next_row, next_col):
                 break
     else:
         # Take action proposed by DQN
-        state_tensor = torch.tensor([state], dtype=torch.float32)  # Wrap the state in a tensor
-        q_values = dqn(state_tensor)
-        max_action = q_values.argmax().item()
+        state_tensor = tf.convert_to_tensor([state])  # Wrap the state in a tensor
+        # torch.tensor([state], dtype=torch.float32)  # Wrap the state in a tensor
+        q_values = dqn(state_tensor, training = False)
+        max_action = tf.argmax(q_values).numpy()
+        # max_action = q_values.argmax().item()
         # print("q_values.shape = ", q_values.shape)
         # print("q_values", q_values)
         # print(max_action)
@@ -197,6 +163,11 @@ def is_goal_reached(reward):
 
 action_counter = [0,0,0,0]
 
+from tensorflow import keras
+
+optimizer = keras.optimizers.Adam(learning_rate=0.00025, clipnorm=1.0)
+loss_function = keras.losses.Huber()
+
 # DQN training loop
 for episode_idx in range(max_episodes):
     row = 0
@@ -215,8 +186,6 @@ for episode_idx in range(max_episodes):
         # Simulate environment (transition to next state and get reward)
         next_row, next_col = calculate_next_state(state_idx, action)
         next_state_idx = next_row * n_cols + next_col
-        
-        # reward = rewards[next_row][next_col]
         reward = get_reward_for_field(next_row, next_col)
         done = is_goal_reached(reward)                    # Check if goal reached
         total_reward += reward
@@ -230,49 +199,48 @@ for episode_idx in range(max_episodes):
         # Sample a random batch from replay memory
         if len(replay_memory) > batch_size:
             transitions = random.sample(replay_memory, batch_size)
-            state_batch = torch.tensor([t.state_idx for t in transitions], dtype=torch.float32)
-            action_batch = torch.tensor([t.action for t in transitions], dtype=torch.int64).unsqueeze(1)
-            reward_batch = torch.tensor([t.reward for t in transitions], dtype=torch.float32)
-            next_state_batch = torch.tensor([t.next_state_idx for t in transitions], dtype=torch.float32)
-            done_batch = torch.tensor([t.done for t in transitions], dtype=torch.float32)
+            state_batch      = np.array([t.state_idx for t in transitions])
+            action_batch     = np.array([t.action for t in transitions])
+            reward_batch     =          [t.reward for t in transitions]
+            next_state_batch =          [t.next_state_idx for t in transitions]
+            done_batch       = np.array([t.done for t in transitions])
+            
             # print("state_batch = ", state_batch.shape)
             # print("action_batch = ", action_batch.shape)
             # print("reward_batch = ", reward_batch.shape)
             # print("next_state_batch = ", next_state_batch.shape)
 
             # Calculate Q-values for current and next states
-            q_values = dqn(state_batch)
-            # print("action_batch: ", action_batch)
-            q_values = q_values.gather(1, action_batch)
-            next_q_values = target_dqn(next_state_batch).max(1)[0].detach()
-            # expected_q_values = reward_batch + gamma * (1 - done_batch) * next_q_values
+            future_reward_batch = target_dqn.predict(next_state_batch)
+            updated_q_values = reward_batch + gamma * tf.reduce_max(future_reward_batch)
+            updated_q_values = updated_q_values * (1 - done_batch) - done_batch
+            masks = tf.one_hot(action_batch, n_actions)
 
-            
-            # print("reward_batch.shape      => ", reward_batch.shape          )
-            # print("done_batch.shape        => ", done_batch.shape            )
-            # print("next_q_values.shape     => ", next_q_values.shape         )
-            expected_q_values = reward_batch + gamma * (1 - done_batch) * next_q_values
-            # print("expected_q_values.shape => ", expected_q_values.shape     )
+            with tf.GradientTape() as tape:
+                print(state_batch)
+                # q_values = dqn.fit_generator()
+                temp = tf.expand_dims(state_batch, 0)
+                temp = tf.convert_to_tensor(temp)
+                print(state_batch)
+                q_values = dqn(temp)
+                q_action = tf.reduce_sum(tf.multiply(q_values, masks), axis=1)
+                loss = loss_function(updated_q_values, q_action)
 
-            # Compute loss and update DQN
-            loss = loss_fn(q_values, expected_q_values.unsqueeze(1))
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-        #print(state, next_state_idx, action, step_count+1)
-
+            grads = tape.gradient(loss, dqn.trainable_variables)
+            optimizer.apply_gradients(zip(grads, dqn.trainable_variables))
+        
         row = next_row
         col = next_col
         step_count += 1
 
-        if step_count > 40:  # Terminate the episode if steps exceed 20
+        if step_count > 40:  # Terminate the episode if steps exceed 40
             done = True
 
         # Decay epsilon
         epsilon = max(min_epsilon, epsilon * epsilon_decay)
 
     if episode_idx % target_update == 0:
-        target_dqn.load_state_dict(dqn.state_dict())  # Update target network
+        target_dqn.set_weights(dqn.get_weights())  # Update target network
 
     if ((episode_idx+1) % 1000) == 0:
         print("Number of trained episodes: ", episode_idx)
@@ -289,6 +257,22 @@ done = False
 step_count = 0
 
 while not done:
+    state_tensor = tf.convert_to_tensor([state])
+    q_values = dqn(state_tensor, training=False)
+    action = tf.argmax(q_values).numpy()
+    next_row, next_col = calculate_next_state(state, action)
+
+    generated_actions.append(index_to_action[action])
+    print(int(state/n_rows), state%n_cols, index_to_action[action])
+    print("Next Position:", next_row, next_col)
+    next_state_idx = next_row * n_cols + next_col
+
+    done = True if (next_row == goal_field[0] and next_col == goal_field[1]) else False  # Check if goal reached
+    state = next_state_idx
+    step_count += 1
+    done = True if step_count > 50 else done
+
+
     q_values = dqn(torch.tensor([state], dtype=torch.float32))
     action = q_values.argmax().item()
     next_row, next_col = calculate_next_state(state, action)
@@ -308,5 +292,5 @@ while not done:
 
 print("Generated Actions:", generated_actions)
 
-sys.stdout = orig_stdout
-f.close()
+# sys.stdout = orig_stdout
+# f.close()
