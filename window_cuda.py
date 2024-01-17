@@ -1,13 +1,14 @@
 import tkinter as tk
 import random
-
+import torch
 
 class GridWindow:
-    def __init__(self, root, rows, cols, num_cows):
+    def __init__(self, root, rows, cols, num_cows, device):
         self.root = root
         self.rows = rows
         self.cols = cols
         self.cells = [[None for _ in range(cols)] for _ in range(rows)]
+        self.device = device  # Store the device
 
         self.cows = []
         self.num_cows = num_cows
@@ -107,9 +108,6 @@ class GridWindow:
             self.mower.grid(row=new_row, column=new_col)
             if self.cells[new_row][new_col]["bg"] == "green":
                 self.cells[new_row][new_col]["bg"] = "#006400"
-    
-    def move_mower_abs(self, row, col):
-        self.mower.grid(row=row, column=col)
 
 
     def get_state(self):
@@ -127,7 +125,12 @@ class GridWindow:
                     state.append(1)  # Besucht
                 else:
                     state.append(0)  # Nicht besucht
+
+        # Move state to GPU
+        state = torch.tensor(state, dtype=torch.float32).to(self.device)
+
         return state
+
 
 
     def get_future_state(self, current_state, action):
@@ -155,47 +158,44 @@ class GridWindow:
 
 
     def get_reward(self, state, future_row, future_col):
-        
         row_cow = []
         col_cow = []
 
-        row = state[0]
-        col = state[1]
+        row = int(state[0].item())
+        col = int(state[1].item())
 
-        row_cow.append(state[3])
-        col_cow.append(state[4])
+        row_cow.append(int(state[3].item()))
+        col_cow.append(int(state[4].item()))
 
-        row_cow.append(state[5])
-        col_cow.append(state[6])
+        row_cow.append(int(state[5].item()))
+        col_cow.append(int(state[6].item()))
 
-        row_cow.append(state[7])
-        col_cow.append(state[8])
+        row_cow.append(int(state[7].item()))
+        col_cow.append(int(state[8].item()))
 
-        row_cow.append(state[9])
-        col_cow.append(state[10])
-        # [position of mower row, position of mower col, position of cow1 row, position of cow1 col, position of cow2 row, position of cow2 col, position of cow3 row, position of cow3 col, position of cow4 row, position of cow4 col, position of cow5 row, position of cow5 col, 1 if we have visitied this field and 0 if not ]
-        # state = [mower_row, mower_col, cow1_row, cow1_col, cow2_row, cow2_col, ..., target_row, target_col, 0, 1, 0, 1, ...]
+        row_cow.append(int(state[9].item()))
+        col_cow.append(int(state[10].item()))
 
-        if (future_row == row_cow[0] and future_col == col_cow[0]) or (future_row == row_cow[1] and future_col == col_cow[1]) or (future_row == row_cow[2] and future_col == col_cow[2]) or (future_row == row_cow[3] and future_col == col_cow[3]):
+        if (
+            (future_row == row_cow[0] and future_col == col_cow[0]) or
+            (future_row == row_cow[1] and future_col == col_cow[1]) or
+            (future_row == row_cow[2] and future_col == col_cow[2]) or
+            (future_row == row_cow[3] and future_col == col_cow[3])
+        ):
             reward = -10
-
-        visited_status = state[-(self.rows * self.cols):]
-
-        # Überprüfe, ob das Feld an der Position des Rasenmähers besucht wurde
-        if visited_status[future_row * self.cols + future_col] == 1:
-            reward = -5
         else:
-            reward = 5
+            visited_status = state[-(self.rows * self.cols):].to(torch.bool)  # Convert to boolean tensor
+            if visited_status[future_row.long() * self.cols + future_col.long()].item():
+                reward = -5
+            else:
+                reward = 5
 
-        if row == self.target.grid_info()["row"] and col == self.target.grid_info()["column"]:
-
-            alle_besucht = all(state[12:])
-
-            if alle_besucht is True:
-                reward = 500
+            if row == int(self.target.grid_info()["row"]) and col == int(self.target.grid_info()["column"]):
+                alle_besucht = all(state[12:])
+                if alle_besucht:
+                    reward = 500
 
         return reward
-
 
 
 def is_field_visited(state, rows, cols, mower_row, mower_col):
@@ -215,8 +215,8 @@ def main():
     rows = 20
     cols = 20
     num_cows = 5
-
-    grid_window = GridWindow(root, rows, cols, num_cows)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # Detect GPU availability
+    grid_window = GridWindow(root, rows, cols, num_cows, device)  # Pass the device to GridWindow
 
     root.bind("<Up>", grid_window.move_mower)
     root.bind("<Down>", grid_window.move_mower)
