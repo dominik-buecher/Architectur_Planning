@@ -30,8 +30,64 @@ from tensorflow.keras import layers
 #     print(sc.read())
 
 # Define the environment
-n_rows = 10
-n_cols = 10
+n_rows = 15
+n_cols = 15
+
+cows = [(1,10), 
+        (5,5) ]
+
+actions = [
+    (-1, 0), # Up
+    ( 1, 0), # Down
+    ( 0,-1), # Left
+    ( 0, 1)  # Right
+]
+
+
+# def perform_random_cow_move():
+#     global actions, cows
+#     act = random.choice(actions)
+#     for idx, _ in enumerate(cows):
+#         # cows[idx] = cows[idx] + act
+#         cows[idx] = tuple(sum(x) for x in zip(cows[idx], act))
+#     print(cows)
+
+from window import *
+class GUI():
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.title("Grid Window with Cows, Mower, and Target")
+        self.winHandle = GridWindow(self.root, n_rows, n_cols, 4)
+
+    def update(self):
+        self.winHandle.move_cows()
+
+    def run(self):
+        self.root.mainloop()
+
+g = GUI()
+
+import threading
+import time
+
+def thready():
+    for i in range(1,100):
+        time.sleep(1)
+        g.update()
+        print("asdf")
+
+t = threading.Thread(target=thready)
+t.start()
+
+g.run()
+
+
+
+
+
+
+    
+
 # n_states = n_rows * n_cols
 n_actions = 4 
 actions = ['Up', 'Down', 'Left', 'Right']
