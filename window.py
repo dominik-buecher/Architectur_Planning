@@ -103,6 +103,9 @@ class GridWindow:
             self.mower.grid(row=new_row, column=new_col)
             if self.cells[new_row][new_col]["bg"] == "green":
                 self.cells[new_row][new_col]["bg"] = "#006400"
+    
+    def move_mower_abs(self, row, col):
+        self.mower.grid(row=row, column=col)
 
 
     def get_state(self):
