@@ -109,6 +109,10 @@ class GridWindow:
                 self.cells[new_row][new_col]["bg"] = "#006400"
     
     def move_mower_abs(self, row, col):
+        if not any(c["cow"].grid_info()["row"] == row and c["cow"].grid_info()["column"] == col for c in self.cows):
+            self.mower.grid(row=row, column=col)
+            if self.cells[row][col]["bg"] == "green":
+                self.cells[row][col]["bg"] = "#006400"
         self.mower.grid(row=row, column=col)
 
 
