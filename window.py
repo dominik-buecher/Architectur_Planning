@@ -30,6 +30,13 @@ class GridWindow:
                 cell.grid(row=row, column=col)
                 self.cells[row][col] = cell
 
+    def reset(self):
+        for r in range(self.rows):
+            for c in range(self.cols):
+                self.cells[r][c]["bg"] = "green"
+        self.create_mower()
+        self.create_target()
+
     def create_cows(self):
         for _ in range(self.num_cows):
             cow_row, cow_col = self.get_random_empty_location()

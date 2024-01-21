@@ -18,7 +18,7 @@ class GUI():
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Grid Window with Cows, Mower, and Target")
-        self.winHandle = GridWindow(self.root, n_rows, n_cols, 4)
+        self.winHandle = GridWindow(self.root, n_rows, n_cols, 0)
 
     def update(self):
         # self.winHandle.move_cows()
@@ -29,6 +29,10 @@ class GUI():
 
     def set_mower_abs(self, row, col):
         self.winHandle.move_mower_abs(row, col)
+    
+    def reset(self):
+        self.winHandle.move_mower_abs(0,0)
+        self.winHandle.reset()
 
 
 g = GUI()
@@ -78,8 +82,8 @@ class PathFinder():
         self.n_rows = 10
         self.n_cols = 10
         # n_states = n_rows * n_cols
-        self. n_actions = 4 
-        self.actions = ['Up', 'Down', 'Left', 'Right']
+        self. n_actions = 5
+        self.actions = ['Up', 'Down', 'Left', 'Right', 'Stop']
         
         self.rewards = []
         self.goal_field = (self.n_rows-1, self.n_cols-1)
@@ -109,13 +113,42 @@ class PathFinder():
         self.rewards[self.goal_field[0]][self.goal_field[1]] = self.goal_reward
 
     # fields_travelled = []
-    def get_reward_for_field(self, row_idx, col_idx):
+    def get_reward_for_field(self, row_idx, col_idx, action):
+        reward = 0
+        ideal_action = 0
+
+        if row_idx in [0,2,4,6,8]:
+            # move right is preferred
+            if col_idx == 9:
+                # move down is preferred
+                ideal_action = 1
+            else:
+                ideal_action = 3
+        else:
+            # move left is preferred
+            if col_idx == 0:
+                # move down is prefered
+                ideal_action = 1
+            else:
+                ideal_action = 2
+        
+        if action == ideal_action:
+            reward = 2
+        elif action == 4: # stop
+            reward = 0
+        else:
+            reward = -2
+        #cows not yet taken into account
+
+        return reward
+
+
         # if rewards[row_idx][col_idx] == 0:
         #     return -1
         # else:
-        r = self.rewards[row_idx][col_idx]
-        self.rewards[row_idx][col_idx] = -1
-        return r
+        # r = self.rewards[row_idx][col_idx]
+        # self.rewards[row_idx][col_idx] = -1
+        # return r
 
     def is_goal_reached(self, reward):
         if reward == self.goal_reward:
@@ -127,7 +160,7 @@ class PathFinder():
 
     def run(self):
         # Define the action-to-index dictionary
-        index_to_action = {0: 'Up', 1: 'Down', 2:'Left', 3: 'Right'}
+        index_to_action = {0: 'Up', 1: 'Down', 2:'Left', 3: 'Right', 4: 'Stop'}
 
         # Define rewards and penalties
         
@@ -138,7 +171,7 @@ class PathFinder():
         # DQN parameters
         gamma = 0.99995    # Discount factor
         epsilon = 1.0      # Initial exploration rate
-        epsilon_decay = 0.999997
+        epsilon_decay = 0.999998
         min_epsilon = 0.1
         alpha = 0.20
         batch_size = 32
@@ -182,6 +215,8 @@ class PathFinder():
             elif action == 3:  # Move Right
                 col = col + 1
                 col = min(col, self.n_cols-1)
+            elif action == 4:  # Stop
+                pass
 
             return row, col 
 
@@ -236,7 +271,7 @@ class PathFinder():
                 # print("q_values.shape = ", q_values.shape)
                 # print("q_values", q_values)
                 # print(max_action)
-                assert(max_action >= 0 and max_action <= 3)
+                assert(max_action >= 0 and max_action < self.n_actions)
 
                 next_row, next_col = calculate_next_state(state, max_action)
 
@@ -252,7 +287,7 @@ class PathFinder():
             return action
 
 
-        action_counter = [0,0,0,0]
+        action_counter = [0,0,0,0,0]
 
         def perform_action(state_idx, action):
             next_row, next_col = calculate_next_state(state_idx, action)
@@ -260,13 +295,12 @@ class PathFinder():
             
             global winHandle
             g.set_mower_abs(next_row, next_col)
-            time.sleep(0.05)
+            # time.sleep(1)
             # g.update()
             return next_state_idx, next_row, next_col
 
         def reset_env():
-            global winHandle
-            g.set_mower_abs(0, 0)
+            g.reset()
             # g.update()
 
         # DQN training loop
@@ -294,9 +328,10 @@ class PathFinder():
                 # next_state_idx = next_row * self.n_cols + next_col
                 
                 # reward = rewards[next_row][next_col]
-                reward = self.get_reward_for_field(next_row, next_col)
+                reward = self.get_reward_for_field(next_row, next_col, action)
                 done = self.is_goal_reached(reward)                    # Check if goal reached
                 total_reward += reward
+                # print("Got reward", reward, "for moving", index_to_action[action])
                 
                 # Store transition in replay memory
                 transition = Transition(state_idx, action, next_state_idx, reward, done)
@@ -342,7 +377,7 @@ class PathFinder():
                 col = next_col
                 step_count += 1
 
-                if step_count > 100:  # Terminate the episode if steps exceed 20
+                if step_count > 200:  # Terminate the episode if steps exceed 20
                     done = True
 
                 # Decay epsilon
