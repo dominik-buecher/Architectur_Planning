@@ -87,7 +87,7 @@ class PathFinder():
         
         self.rewards = []
         self.goal_field = (self.n_rows-1, self.n_cols-1)
-        self.goal_reward = 100
+        self.goal_reward = self.n_rows * self.n_cols * 2 - 2
         
         self.goal_reached_counter = 0
 
@@ -150,13 +150,23 @@ class PathFinder():
         # self.rewards[row_idx][col_idx] = -1
         # return r
 
-    def is_goal_reached(self, reward):
-        if reward == self.goal_reward:
+    # def is_goal_reached(self, reward):
+    #     if reward == self.goal_reward:
+    #         self.goal_reached_counter += 1
+    #         # print("goal reached!!")
+    #         return True
+    #     else:
+    #         return False
+    
+    def is_goal_reached(self, row, col):
+        goal_row, goal_col = self.goal_field
+        if goal_row == row and goal_col == col:
             self.goal_reached_counter += 1
-            # print("goal reached!!")
+            print("goal reached!!")
             return True
         else:
             return False
+        
 
     def run(self):
         # Define the action-to-index dictionary
@@ -176,7 +186,8 @@ class PathFinder():
         alpha = 0.20
         batch_size = 32
         target_update = 100
-        max_episodes = 2000
+        max_episodes = 4000
+        learning_rate = 0.01
         # max_episodes = 4000
 
         # Initialize replay memory
@@ -196,7 +207,7 @@ class PathFinder():
         summary(target_dqn)
 
         # Define optimizer and loss function
-        optimizer = optim.Adam(dqn.parameters(), lr=0.01)
+        optimizer = optim.Adam(dqn.parameters(), lr=learning_rate)
         loss_fn = nn.MSELoss()
 
         def calculate_next_state(current_state, action):
@@ -329,7 +340,8 @@ class PathFinder():
                 
                 # reward = rewards[next_row][next_col]
                 reward = self.get_reward_for_field(next_row, next_col, action)
-                done = self.is_goal_reached(reward)                    # Check if goal reached
+                done = self.is_goal_reached(next_row, next_col)                    # Check if goal reached
+                # done = self.is_goal_reached(reward)                    # Check if goal reached
                 total_reward += reward
                 # print("Got reward", reward, "for moving", index_to_action[action])
                 
@@ -377,7 +389,7 @@ class PathFinder():
                 col = next_col
                 step_count += 1
 
-                if step_count > 200:  # Terminate the episode if steps exceed 20
+                if step_count > 400:  # Terminate the episode if steps exceed 20
                     done = True
 
                 # Decay epsilon
@@ -386,10 +398,10 @@ class PathFinder():
             if episode_idx % target_update == 0:
                 target_dqn.load_state_dict(dqn.state_dict())  # Update target network
 
-            if ((episode_idx+1) % 1000) == 0:
+            if ((episode_idx+1) % 100) == 0:
                 print("Number of trained episodes: ", episode_idx+1)
                 print("Current epsilon =", epsilon)
-                print("Goal reached:", goal_reached_counter, "times")
+                print("Goal reached:", self.goal_reached_counter, "times")
 
         print("                                 ", self.actions)
         print("Actions performed during training", action_counter)
@@ -413,7 +425,7 @@ class PathFinder():
             next_row, next_col = calculate_next_state(state, action)
             next_state_idx = next_row * self.n_cols + next_col
             
-            done = True if (next_row == goal_field[0] and next_col == goal_field[1]) else False  # Check if goal reached
+            done = True if (next_row == self.goal_field[0] and next_col == self.goal_field[1]) else False  # Check if goal reached
 
             state = next_state_idx
             step_count += 1
