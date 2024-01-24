@@ -200,7 +200,7 @@ class PathFinder():
         goal_row, goal_col = self.goal_field
         if goal_row == row and goal_col == col:
             self.goal_reached_counter += 1
-            print("goal reached!!")
+            # print("goal reached!!")
             return True
         else:
             return False
@@ -229,7 +229,7 @@ class PathFinder():
         alpha = 0.20
         batch_size = 32
         target_update = 100
-        max_episodes = 6000
+        max_episodes = 8500
         learning_rate = 0.001
         # max_episodes = 4000
 
@@ -392,8 +392,8 @@ class PathFinder():
                 action = torch.topk(q_values, 2).indices[0, 1].item() if next_row < 0 or next_row >= self.n_rows or next_col < 0 or next_col >= self.n_cols else action
                 generated_actions.append(index_to_action[action])
                 r,c = get_coord_from_state(state)
-                print(r, c, index_to_action[action])
-                print("Next Position:", next_row, next_col)
+                # print(r, c, index_to_action[action])
+                # print("Next Position:", next_row, next_col)
                 next_state_idx, next_row, next_col = perform_action(state, action, sleep_time_ms=100)
 
                 # next_row, next_col = calculate_next_state(state, action)
@@ -404,9 +404,9 @@ class PathFinder():
                 state = next_state_idx
                 step_count += 1
                 done = True if step_count > 110 else done
-                print("finished")
-                print("step_count", step_count)
-                print("(next_row == self.goal_field[0] and next_col == self.goal_field[1])", (next_row == self.goal_field[0] and next_col == self.goal_field[1]))
+                # print("finished")
+                # print("step_count", step_count)
+                # print("(next_row == self.goal_field[0] and next_col == self.goal_field[1])", (next_row == self.goal_field[0] and next_col == self.goal_field[1]))
 
             print("Generated Actions:", generated_actions)
         
@@ -511,6 +511,7 @@ class PathFinder():
         print("Actions performed during training", action_counter)
 
         while True:
+            print("Testing after training is finished:\n\n")
             time.sleep(20)
             do_test()
 
