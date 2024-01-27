@@ -18,7 +18,7 @@ class GUI():
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Grid Window with Cows, Mower, and Target")
-        self.winHandle = GridWindow(self.root, n_rows, n_cols, 4)
+        self.winHandle = GridWindow(self.root, n_rows, n_cols, 0)
 
     def update(self):
         # self.winHandle.move_cows()
@@ -29,6 +29,10 @@ class GUI():
 
     def set_mower_abs(self, row, col):
         self.winHandle.move_mower_abs(row, col)
+    
+    def reset(self):
+        self.winHandle.move_mower_abs(0,0)
+        self.winHandle.reset()
 
 
 g = GUI()
@@ -61,6 +65,8 @@ class DQN(nn.Module):
         # works quite well
         self.fc1 = nn.Linear(input_size, 128)
         self.fc2 = nn.Linear(128, output_size)
+        self.fc1.reset_parameters()
+        self.fc2.reset_parameters()
 
     def forward(self, x):
         # x = F.relu(self.fc1(x.view(-1, self.fc1.in_features)))
@@ -78,12 +84,17 @@ class PathFinder():
         self.n_rows = 10
         self.n_cols = 10
         # n_states = n_rows * n_cols
-        self. n_actions = 4 
-        self.actions = ['Up', 'Down', 'Left', 'Right']
+        self. n_actions = 5
+        self.actions = ['Up', 'Down', 'Left', 'Right', 'Stop']
+        self.ACTION_UP    = 0
+        self.ACTION_DOWN  = 1
+        self.ACTION_LEFT  = 2
+        self.ACTION_RIGHT = 3
+        self.ACTION_STOP  = 4
         
         self.rewards = []
         self.goal_field = (self.n_rows-1, self.n_cols-1)
-        self.goal_reward = 100
+        self.goal_reward = self.n_rows * self.n_cols * 2 - 2
         
         self.goal_reached_counter = 0
 
@@ -109,25 +120,95 @@ class PathFinder():
         self.rewards[self.goal_field[0]][self.goal_field[1]] = self.goal_reward
 
     # fields_travelled = []
-    def get_reward_for_field(self, row_idx, col_idx):
+        
+    def get_ideal_action(self, row_idx, col_idx):
+        ideal_action = 0
+        if row_idx in [0,2,4,6,8]:
+            # move right is preferred
+            if col_idx == 9:
+                # move down is preferred
+                ideal_action = self.ACTION_DOWN
+            else:
+                ideal_action = self.ACTION_RIGHT
+        elif row_idx in [1,3,5,7]:
+            # move left is preferred
+            if col_idx == 0:
+                # move down is prefered
+                ideal_action = self.ACTION_DOWN
+            else:
+                ideal_action = self.ACTION_LEFT
+        elif row_idx in [9]:
+            # move right is preferred
+            ideal_action = self.ACTION_RIGHT
+        return ideal_action
+
+    def is_allowed_action(self, row, col, action):
+        if action == self.ACTION_DOWN:
+            next_row = row+1
+            next_col = col
+        elif action == self.ACTION_UP:
+            next_row = row-1
+            next_col = col
+        elif action == self.ACTION_LEFT:
+            next_row = row
+            next_col = col-1
+        elif action == self.ACTION_RIGHT:
+            next_row = row
+            next_col = col+1
+        elif action == self.ACTION_STOP:
+            next_row = row
+            next_col = col
+        if next_row >= 0 and next_row < self.n_rows and next_col >= 0 and next_col < self.n_cols:
+            return True
+        else:
+            return False
+
+    def get_reward_for_field(self, row_idx, col_idx, action):
+        reward = 0
+        ideal_action = self.get_ideal_action(row_idx, col_idx)
+        
+        if self.is_allowed_action(row_idx, col_idx, action):
+            if action == ideal_action:
+                reward = 2
+            elif action == 4: # stop
+                reward = 0
+            else:
+                reward = -2
+            #cows not yet taken into account
+        else:
+            reward = -20
+
+        return reward
+
+
         # if rewards[row_idx][col_idx] == 0:
         #     return -1
         # else:
-        r = self.rewards[row_idx][col_idx]
-        self.rewards[row_idx][col_idx] = -1
-        return r
+        # r = self.rewards[row_idx][col_idx]
+        # self.rewards[row_idx][col_idx] = -1
+        # return r
 
-    def is_goal_reached(self, reward):
-        if reward == self.goal_reward:
+    # def is_goal_reached(self, reward):
+    #     if reward == self.goal_reward:
+    #         self.goal_reached_counter += 1
+    #         # print("goal reached!!")
+    #         return True
+    #     else:
+    #         return False
+    
+    def is_goal_reached(self, row, col):
+        goal_row, goal_col = self.goal_field
+        if goal_row == row and goal_col == col:
             self.goal_reached_counter += 1
             # print("goal reached!!")
             return True
         else:
             return False
+        
 
     def run(self):
         # Define the action-to-index dictionary
-        index_to_action = {0: 'Up', 1: 'Down', 2:'Left', 3: 'Right'}
+        index_to_action = {self.ACTION_UP: 'Up', self.ACTION_DOWN: 'Down', self.ACTION_LEFT:'Left', self.ACTION_RIGHT: 'Right', self.ACTION_STOP: 'Stop'}
 
         # Define rewards and penalties
         
@@ -136,14 +217,20 @@ class PathFinder():
 
 
         # DQN parameters
-        gamma = 0.99995    # Discount factor
+        # gamma = 0.99995    # Discount factor
+        gamma = 0.7    # Discount factor
         epsilon = 1.0      # Initial exploration rate
-        epsilon_decay = 0.999997
-        min_epsilon = 0.1
+        epsilon_decay = 0.999998
+        min_epsilon = 0.03
+        # guided_epsilon_probability = 0.9
+        guided_epsilon_probability = 0.5
+        # epsilon_decay = 0.999998
+        # min_epsilon = 0.1
         alpha = 0.20
         batch_size = 32
         target_update = 100
-        max_episodes = 2000
+        max_episodes = 8500
+        learning_rate = 0.001
         # max_episodes = 4000
 
         # Initialize replay memory
@@ -163,25 +250,28 @@ class PathFinder():
         summary(target_dqn)
 
         # Define optimizer and loss function
-        optimizer = optim.Adam(dqn.parameters(), lr=0.01)
+        optimizer = optim.Adam(dqn.parameters(), lr=learning_rate)
         loss_fn = nn.MSELoss()
 
         def calculate_next_state(current_state, action):
             # Define the transition rules based on the chosen action
-            row, col = current_state // self.n_cols, current_state % self.n_cols
+            # row, col = current_state // self.n_cols, current_state % self.n_cols
+            row, col = get_coord_from_state(current_state)
 
-            if action == 0:  # Move Up
+            if action == self.ACTION_UP:  # Move Up
                 row = row - 1
                 row = max(0, row)
-            elif action == 1:  # Move Down
+            elif action == self.ACTION_DOWN:  # Move Down
                 row = row + 1
                 row = min(row, self.n_rows-1)
-            elif action == 2:  # Move Left
+            elif action == self.ACTION_LEFT:  # Move Left
                 col = col - 1
                 col = max(0,col)
-            elif action == 3:  # Move Right
+            elif action == self.ACTION_RIGHT:  # Move Right
                 col = col + 1
                 col = min(col, self.n_cols-1)
+            elif action == self.ACTION_STOP:  # Stop
+                pass
 
             return row, col 
 
@@ -213,21 +303,31 @@ class PathFinder():
         #             action = max_action
         #     return action
 
-        def is_allowed_action(next_row, next_col):
-            if next_row >= 0 and next_row < self.n_rows and next_col >= 0 and next_col < self.n_cols:
-                return True
-            else:
-                return False
+        def get_state_from_coord(row, col):
+            return row * self.n_cols + col
+        
+        def get_coord_from_state(state):
+            row = int(state/self.n_cols)
+            col = int(state % n_rows)
+            return row, col
 
         # Function to select epsilon-greedy action
-        def epsilon_greedy_action(state, epsilon):
+        def epsilon_greedy_action(state, epsilon, guided_epsilon_probability=0.0):
             if random.uniform(0, 1) < epsilon:
                 # Take random action
-                while True:
-                    action = random.randint(0, self.n_actions - 1)
-                    next_row, next_col = calculate_next_state(state, action)
-                    if is_allowed_action(next_row, next_col):
-                        break
+                if random.uniform(0, 1) < guided_epsilon_probability:
+                    r,c = get_coord_from_state(state)
+                    action = self.get_ideal_action(r,c)
+                else:
+                    while True:
+                        action = random.randint(0, self.n_actions - 1)
+                        # next_row, next_col = calculate_next_state(state, action)
+                        # if is_allowed_action(next_row, next_col):
+                        #     break
+                        r,c = get_coord_from_state(state)
+                        if self.is_allowed_action(r,c,action):
+                            break
+
             else:
                 # Take action proposed by DQN
                 state_tensor = torch.tensor([state], dtype=torch.float32)  # Wrap the state in a tensor
@@ -236,38 +336,80 @@ class PathFinder():
                 # print("q_values.shape = ", q_values.shape)
                 # print("q_values", q_values)
                 # print(max_action)
-                assert(max_action >= 0 and max_action <= 3)
+                assert(max_action >= 0 and max_action < self.n_actions)
 
                 next_row, next_col = calculate_next_state(state, max_action)
 
                 # If action is not allowed, anyways take allowed random action
-                if not is_allowed_action(next_row, next_col):
+                r,c = get_coord_from_state(state)
+                if not self.is_allowed_action(r,c, max_action):
+                # if not is_allowed_action(next_row, next_col):
                     while True:
                         action = random.randint(0, self.n_actions - 1)
                         next_row, next_col = calculate_next_state(state, action)
-                        if is_allowed_action(next_row, next_col):
+                        if self.is_allowed_action(r,c, action):
+                        # if is_allowed_action(next_row, next_col):
                             break
                 else:
                     action = max_action
             return action
 
 
-        action_counter = [0,0,0,0]
+        action_counter = [0,0,0,0,0]
 
-        def perform_action(state_idx, action):
+
+
+        def perform_action(state_idx, action, sleep_time_ms=0):
             next_row, next_col = calculate_next_state(state_idx, action)
-            next_state_idx = next_row * self.n_cols + next_col
+            next_state_idx = get_state_from_coord(next_row, next_col)
             
             global winHandle
             g.set_mower_abs(next_row, next_col)
-            time.sleep(0.05)
+            time.sleep(sleep_time_ms/1000)
             # g.update()
             return next_state_idx, next_row, next_col
 
         def reset_env():
-            global winHandle
-            g.set_mower_abs(0, 0)
+            g.reset()
             # g.update()
+        
+        def do_test():
+            
+            self.reset_rewards()
+            reset_env()
+
+            # After training, generate actions for an episode
+            generated_actions = []
+            state = 0  # Starting state
+            done = False
+            step_count = 0
+
+            while not done:
+                q_values = dqn(torch.tensor([state], dtype=torch.float32))
+                print(q_values)
+                action = q_values.argmax().item()
+                next_row, next_col = calculate_next_state(state, action)
+                action = torch.topk(q_values, 2).indices[0, 1].item() if next_row < 0 or next_row >= self.n_rows or next_col < 0 or next_col >= self.n_cols else action
+                generated_actions.append(index_to_action[action])
+                r,c = get_coord_from_state(state)
+                # print(r, c, index_to_action[action])
+                # print("Next Position:", next_row, next_col)
+                next_state_idx, next_row, next_col = perform_action(state, action, sleep_time_ms=100)
+
+                # next_row, next_col = calculate_next_state(state, action)
+                # next_state_idx = next_row * self.n_cols + next_col
+                
+                done = True if (next_row == self.goal_field[0] and next_col == self.goal_field[1]) else False  # Check if goal reached
+
+                state = next_state_idx
+                step_count += 1
+                done = True if step_count > 110 else done
+                # print("finished")
+                # print("step_count", step_count)
+                # print("(next_row == self.goal_field[0] and next_col == self.goal_field[1])", (next_row == self.goal_field[0] and next_col == self.goal_field[1]))
+
+            print("Generated Actions:", generated_actions)
+        
 
         # DQN training loop
         for episode_idx in range(max_episodes):
@@ -281,9 +423,9 @@ class PathFinder():
 
 
             while not done:
-                state_idx = row * self.n_cols + col
+                state_idx = get_state_from_coord(row, col)
                 # print("state_idx = ", state_idx)
-                action = epsilon_greedy_action(state_idx, epsilon)
+                action = epsilon_greedy_action(state_idx, epsilon, guided_epsilon_probability=guided_epsilon_probability)
                 action_counter[action] += 1
                 #print(state_idx, index_to_action[action])
                 
@@ -294,9 +436,12 @@ class PathFinder():
                 # next_state_idx = next_row * self.n_cols + next_col
                 
                 # reward = rewards[next_row][next_col]
-                reward = self.get_reward_for_field(next_row, next_col)
-                done = self.is_goal_reached(reward)                    # Check if goal reached
+                reward = self.get_reward_for_field(row, col, action)
+                # reward = self.get_reward_for_field(next_row, next_col, action)
+                done = self.is_goal_reached(row, col)                    # Check if goal reached
+                # done = self.is_goal_reached(reward)                    # Check if goal reached
                 total_reward += reward
+                # print("Got reward", reward, "for moving", index_to_action[action])
                 
                 # Store transition in replay memory
                 transition = Transition(state_idx, action, next_state_idx, reward, done)
@@ -307,6 +452,7 @@ class PathFinder():
                 # Sample a random batch from replay memory
                 if len(replay_memory) > batch_size:
                     transitions = random.sample(replay_memory, batch_size)
+                    # state_batch = torch.tensor([t.state_idx for t in transitions], dtype=torch.float32)
                     state_batch = torch.tensor([t.state_idx for t in transitions], dtype=torch.float32)
                     action_batch = torch.tensor([t.action for t in transitions], dtype=torch.int64).unsqueeze(1)
                     reward_batch = torch.tensor([t.reward for t in transitions], dtype=torch.float32)
@@ -336,13 +482,14 @@ class PathFinder():
                     optimizer.zero_grad()
                     loss.backward()
                     optimizer.step()
+                    
                 #print(state, next_state_idx, action, step_count+1)
 
                 row = next_row
                 col = next_col
                 step_count += 1
 
-                if step_count > 100:  # Terminate the episode if steps exceed 20
+                if step_count > 400:  # Terminate the episode if steps exceed 20
                     done = True
 
                 # Decay epsilon
@@ -351,40 +498,24 @@ class PathFinder():
             if episode_idx % target_update == 0:
                 target_dqn.load_state_dict(dqn.state_dict())  # Update target network
 
-            if ((episode_idx+1) % 1000) == 0:
+            if ((episode_idx+1) % 100) == 0:
                 print("Number of trained episodes: ", episode_idx+1)
                 print("Current epsilon =", epsilon)
-                print("Goal reached:", goal_reached_counter, "times")
+                print("Goal reached:", self.goal_reached_counter, "times")
+                time.sleep(2.5)
+                do_test()
+                time.sleep(2.5)
+                
 
         print("                                 ", self.actions)
         print("Actions performed during training", action_counter)
 
-        # After training, generate actions for an episode
-        generated_actions = []
-        state = 0  # Starting state
-        done = False
-        step_count = 0
+        while True:
+            print("Testing after training is finished:\n\n")
+            time.sleep(20)
+            do_test()
 
-        while not done:
-            q_values = dqn(torch.tensor([state], dtype=torch.float32))
-            print(q_values)
-            action = q_values.argmax().item()
-            next_row, next_col = calculate_next_state(state, action)
-            action = torch.topk(q_values, 2).indices[0, 1].item() if next_row < 0 or next_row >= self.n_rows or next_col < 0 or next_col >= self.n_cols else action
-            generated_actions.append(index_to_action[action])
-            print(int(state/self.n_rows), state%self.n_cols, index_to_action[action])
-            print("Next Position:", next_row, next_col)
-
-            next_row, next_col = calculate_next_state(state, action)
-            next_state_idx = next_row * self.n_cols + next_col
-            
-            done = True if (next_row == goal_field[0] and next_col == goal_field[1]) else False  # Check if goal reached
-
-            state = next_state_idx
-            step_count += 1
-            done = True if step_count > 50 else done
-
-        print("Generated Actions:", generated_actions)
+        
 
 
 import threading
