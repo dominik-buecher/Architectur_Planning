@@ -38,6 +38,8 @@ class DQN(nn.Module):
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward', 'done'))
 
 # ReplayMemory wird verwendet damit der Agent aus alten Erfahrungen lernen kann
+# Erklärung -> https://deeplizard.com/learn/video/Bcuj2fTH4_4
+# -> https://www.kaggle.com/code/viznrvn/deep-q-learning-with-experience-replay-theory
 class ReplayMemory:
     def __init__(self, capacity):
         self.capacity = capacity
@@ -55,8 +57,9 @@ class ReplayMemory:
         return random.sample(self.memory, batch_size)
 
 # Definiere den DQN agent
+# openai gym agent oder stable baseline agent ausprobieren
 class DQNAgent:
-    def __init__(self, input_size, output_size, capacity=10000, batch_size=32, gamma=0.9, epsilon=1.0, epsilon_decay=0.9, min_epsilon=0.1):
+    def __init__(self, input_size, output_size, capacity=10000, batch_size=32, gamma=0.999, epsilon=1.0, epsilon_decay=0.999, min_epsilon=0.1):
         # Parameter festlegen
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.input_size = input_size
