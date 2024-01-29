@@ -38,19 +38,10 @@ class GridWindow:
         self.create_target()
 
     def create_cows(self):
-        # Feste Startpositionen für die Kühe
-        start_positions = [
-            (self.rows // 2, self.cols // 2),
-            (self.rows // 3, self.cols // 3),
-            (2 * self.rows // 3, 2 * self.cols // 3),
-            (self.rows // 4, 3 * self.cols // 4),
-            (3 * self.rows // 4, self.cols // 4)
-        ]
-
-        for i in range(min(self.num_cows, len(start_positions))):
-            start_row, start_col = start_positions[i]
+        for _ in range(self.num_cows):
+            cow_row, cow_col = self.get_random_empty_location()
             cow = tk.Canvas(self.root, width=20, height=20, bg="blue", highlightthickness=0)
-            cow.grid(row=start_row, column=start_col)
+            cow.grid(row=cow_row, column=cow_col)
             self.cows.append({"cow": cow, "direction": random.choice(["up", "down", "left", "right"])})
 
     def create_mower(self):
@@ -125,19 +116,10 @@ class GridWindow:
                 self.cells[new_row][new_col]["bg"] = "#006400"
     
     def move_mower_abs(self, row, col):
-        # Kopiere den aktuellen Zustand
-        current_state = self.get_state()
-
-        # Überprüfe, ob das Zielfeld bereits von einer Kuh besetzt ist
-        if any(c["cow"].grid_info()["row"] == row and c["cow"].grid_info()["column"] == col for c in self.cows):
-            # Wenn eine Kuh auf dem Zielfeld ist, kehre zum alten Zustand zurück und beende die Funktion
-            self.mower.grid(row=current_state[0], column=current_state[1])
-            return
-
-        if self.cells[row][col]["bg"] == "green":
-            self.cells[row][col]["bg"] = "#006400"  # Ändere die Farbe auf "dunkelgrün"
-
-        # Setze den Rasenmäher auf das Zielzellenfeld
+        if not any(c["cow"].grid_info()["row"] == row and c["cow"].grid_info()["column"] == col for c in self.cows):
+            self.mower.grid(row=row, column=col)
+            if self.cells[row][col]["bg"] == "green":
+                self.cells[row][col]["bg"] = "#006400"
         self.mower.grid(row=row, column=col)
 
 
@@ -157,6 +139,7 @@ class GridWindow:
                 else:
                     state.append(0)  # Nicht besucht
         return state
+
 
     def get_future_state(self, current_state, action):
         # {0: 'Up', 1: 'Down', 2:'Left', 3: 'Right'}
@@ -190,19 +173,21 @@ class GridWindow:
         row = state[0]
         col = state[1]
 
-        row_cow = []
-        col_cow = []
+        row_cow.append(state[3])
+        col_cow.append(state[4])
 
-        row = state[0]
-        col = state[1]
+        row_cow.append(state[5])
+        col_cow.append(state[6])
 
-        for i in range(2, len(state) - 2, 2):
-            row_cow.append(state[i])
-            col_cow.append(state[i + 1])
+        row_cow.append(state[7])
+        col_cow.append(state[8])
+
+        row_cow.append(state[9])
+        col_cow.append(state[10])
         # [position of mower row, position of mower col, position of cow1 row, position of cow1 col, position of cow2 row, position of cow2 col, position of cow3 row, position of cow3 col, position of cow4 row, position of cow4 col, position of cow5 row, position of cow5 col, 1 if we have visitied this field and 0 if not ]
         # state = [mower_row, mower_col, cow1_row, cow1_col, cow2_row, cow2_col, ..., target_row, target_col, 0, 1, 0, 1, ...]
 
-        if (future_row, future_col) in zip(row_cow, col_cow):
+        if (future_row == row_cow[0] and future_col == col_cow[0]) or (future_row == row_cow[1] and future_col == col_cow[1]) or (future_row == row_cow[2] and future_col == col_cow[2]) or (future_row == row_cow[3] and future_col == col_cow[3]):
             reward = -10
 
         visited_status = state[-(self.rows * self.cols):]
@@ -217,9 +202,8 @@ class GridWindow:
 
             alle_besucht = all(state[12:])
 
-            # if alle_besucht is True:
-            #     reward = 1000
-            reward = 5000
+            if alle_besucht is True:
+                reward = 500
 
         return reward
     

@@ -8,14 +8,14 @@ import tkinter as tk
 from window import *
 
 
-n_rows = 20
-n_cols = 20
-n_states = n_rows * n_cols
-n_actions = 4 
-
 rows = 20
 cols = 20
-num_cows = 5
+n_states = rows * cols
+n_actions = 4 
+num_cows = 2
+input_size = (n_states + 4 + (2 * num_cows))  # Zustand + Positionen der Kühe
+output_size = n_actions
+
 
 root = tk.Tk()
 root.title("Grid Window with Cows, Mower, and Target")
@@ -112,7 +112,6 @@ class DQNAgent:
 
         # Erstellt Liste/Batch mit den Transtions
         batch = Transition(*zip(*transitions))
-
         state_batch = torch.tensor(batch.state, dtype=torch.float32).to(self.device)
         action_batch = torch.tensor(batch.action, dtype=torch.int64).unsqueeze(1).to(self.device)
         reward_batch = torch.tensor(batch.reward, dtype=torch.float32).to(self.device)
@@ -141,37 +140,42 @@ index_to_action = {0: 'Up', 1: 'Down', 2:'Left', 3: 'Right'}
 
 
 # Create the DQN agent
-input_size = 414
-output_size = n_actions
 dqn_agent = DQNAgent(input_size, output_size)
 
-#train = True
-train = False
+train = True
+#train = False
 
 # training ausführen
 if train is True:
-    
+    initial_state = grid_window.get_state()
     max_episodes = 1000
     for episode in range(max_episodes):
         # aktuellen state laden
-        state = grid_window.get_state()
+        state = initial_state
+        grid_window.reset_to_initial_state(initial_state)
         total_reward = 0
         done = False
         print("episode: ", episode)
         action_counter = 0
         # Schleife durchlaufen bis bedingung erfüllt ist
         while not done:
-            # Wähle Aktion basierend auf aktuellem zustand
+            # Wähle Aktion basierend auf aktuellem Zustand
             action = dqn_agent.select_action(state)
             action_counter += 1
             # Erhalte zukünfitgen State welcher durch die Aktion erreicht wird
             next_row, next_col = grid_window.get_future_state(state, action)
+
+            grid_window.move_mower_abs(next_row, next_col)
+            grid_window.move_cows()
+            grid_window.root.update()
+            grid_window.root.after(1)
+
             next_state = grid_window.get_state()  # Update the state
-            # Berechne Reward basierend auf dem zukünftigen zustand 
+            # Berechne Reward basierend auf dem zukünftigen Zustand 
             reward = grid_window.get_reward(state, next_row, next_col)
             
             # Wenn Reward = 500 erreicht ist oder 1000 Aktionen durchgeführt wurden -> Schleife abbrechen
-            done = True if reward == 500 or action_counter >= 1000  else False
+            done = True if reward >= 500 or action_counter >= 10000 else False
             #print("reward: ", reward)
             
             # Fügt den durchlauf als Transition in die Memory hinzu
@@ -179,9 +183,11 @@ if train is True:
             
             # Train Funktion von Agent aufrufen
             dqn_agent.train()
-
-            state = next_state
             total_reward += reward
+         
+            #print("action: ", action)
+            state = next_state
+
         # Verringern der Wahrscheinlichkeit für zufällige Aktionen
         dqn_agent.decay_epsilon()
         
