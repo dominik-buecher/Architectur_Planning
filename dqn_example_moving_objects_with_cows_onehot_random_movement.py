@@ -136,32 +136,20 @@ class DQNOneHot(nn.Module):
         
         global N_COWS
         
-        # # calculate distance to COWs
-        # for i in range(N_COWS):
-        #     # X distance
-        #     x[i+0] = x[i+0] - x[0]
-        #     # Y distance
-        #     x[i+1] = x[i+1] - x[1]
-        # distances can be negative, therefore encode with sigmoid rather than relu
-        # x = F.sigmoid(self.fc1(x.view(-1, self.fc1.in_features)))
+        # get an input
+        input_tensor = x.view(-1, 2 + 2*N_COWS)
+        input_tensor = input_tensor.long()
 
-        # simply one-hot-encode distance and position
-        print(x)
-        for input in x:
-            array = []
-            for i in input:
-                encoded = F.one_hot(i, num_classes=10)
-                print(encoded)
-
-            # for i in input:
-            #     print(i)
-
-        x = F.one_hot(x.view(-1, self.fc1.in_features), num_classes=10)
-        x = F.relu(self.fc1(x))
+        # encode coords one-hot
+        one_hot_encoded = F.one_hot(input_tensor, num_classes=10).float()
+        # print(one_hot_encoded)
+        
+        x = F.sigmoid(self.fc1(one_hot_encoded.view(-1, self.fc1.in_features)))
 
         # x = F.sigmoid(self.fc1(x.view(-1, self.fc1.in_features)))
         # x = self.fc1(x.view(-1, self.fc1.in_features))
         return self.fc2(x)
+
 
 
 
@@ -185,7 +173,7 @@ class PathFinder():
         
         self.goal_reached_counter = 0
 
-        self.fields_travelled = []
+        self.fields_travelled = {}
 
     # fields_travelled = []
         
@@ -258,6 +246,12 @@ class PathFinder():
             return True
         else:
             return False
+        
+    def has_hit_any_field(self):
+        temp = (len(self.fields_travelled.keys()) == 100)
+        if temp:
+            print("GOAL GOAL GOAL")
+        return temp
 
 
     def get_reward_for_field(self, row_idx, col_idx, action):
@@ -265,19 +259,30 @@ class PathFinder():
         ideal_action = self.get_ideal_action(row_idx, col_idx)
         
         if self.is_allowed_action(row_idx, col_idx, action):
-            if action == ideal_action:
-                reward = 4
-            elif action == 4: # stop
-                reward = -2
+            if self.is_goal_reached(row_idx, col_idx):
+                # are_all_fields_travelled = (len(self.fields_travelled.keys()) == 100)
+                # if are_all_fields_travelled:
+                #     reward = 300
+                if not (row_idx, col_idx) in self.fields_travelled:
+                    if( len(self.fields_travelled.keys()) > 60 ):
+                        reward = len(self.fields_travelled.keys()) * 3
+                        self.fields_travelled[(row_idx, col_idx)] = True
+
             else:
-                reward = -4
-            if self.would_hit_cow(row_idx, col_idx, action):
-                reward -= 20
-                print(datetime.datetime.now().strftime("%M:%S"), "Cow hit.....")
-            if (row_idx, col_idx) in self.fields_travelled:
-                reward -= 5
+                if self.would_hit_cow(row_idx, col_idx, action):
+                    reward += -10
+                    print(datetime.datetime.now().strftime("%M:%S"), "Cow hit.....")
+                if (row_idx, col_idx) in self.fields_travelled:
+                    reward += -5
+                else:
+                    if action == ideal_action:
+                        reward += 8
+                    elif action == 4: #stop
+                        reward += -4
+                    else:
+                        reward += -11
         else:
-            reward = -30
+            reward = -40
 
         return reward
 
@@ -323,14 +328,14 @@ class PathFinder():
         epsilon_decay = 0.999998
         min_epsilon = 0.03
         # guided_epsilon_probability = 0.9
-        guided_epsilon_probability = 0.5
+        guided_epsilon_probability = 0.3
         # epsilon_decay = 0.999998
         # min_epsilon = 0.1
         alpha = 0.20
         batch_size = 32
         target_update = 100
         max_episodes = 8500
-        learning_rate = 0.0005
+        learning_rate = 0.0003
         # max_episodes = 4000
 
         # Initialize replay memory
@@ -343,10 +348,10 @@ class PathFinder():
         # Initialize DQN and target DQN
         input_size = 1+N_COWS  # State_idx_mower + 4x State_idx_cow
         output_size = self.n_actions
-        dqn = DQN(input_size, output_size)
-        target_dqn = DQN(input_size, output_size)
-        # dqn = DQNOneHot(input_size, output_size)
-        # target_dqn = DQNOneHot(input_size, output_size)
+        # dqn = DQN(input_size, output_size)
+        # target_dqn = DQN(input_size, output_size)
+        dqn = DQNOneHot(input_size, output_size)
+        target_dqn = DQNOneHot(input_size, output_size)
         target_dqn.load_state_dict(dqn.state_dict())
         target_dqn.eval()
         summary(target_dqn)
@@ -443,15 +448,18 @@ class PathFinder():
             
             global winHandle
             g.set_mower_abs(next_row, next_col)
-            g.move_cows()
+            if random.uniform(0,1) < 0.30:
+                g.move_cows()
             time.sleep(sleep_time_ms/1000)
             # g.update()
-            self.fields_travelled.append((next_row, next_col))
+            self.fields_travelled[(next_row, next_col)] = True
             return next_state_idx, next_row, next_col
 
         def reset_env():
             g.reset()
-            self.fields_travelled = []
+            self.fields_travelled = {} 
+            self.fields_travelled[(0,0)] = True
+            
             # g.update()
         
         def do_test():
@@ -487,7 +495,7 @@ class PathFinder():
 
                 state = next_state_idx
                 step_count += 1
-                done = True if step_count > 110 else done
+                done = True if step_count > 110 else self.has_hit_any_field()
                 # print("finished")
                 # print("step_count", step_count)
                 # print("(next_row == self.goal_field[0] and next_col == self.goal_field[1])", (next_row == self.goal_field[0] and next_col == self.goal_field[1]))
@@ -598,6 +606,8 @@ class PathFinder():
 
                 if step_count > 400:  # Terminate the episode if steps exceed 20
                     done = True
+                else:
+                    done = self.has_hit_any_field()
 
                 # Decay epsilon
                 epsilon = max(min_epsilon, epsilon * epsilon_decay)

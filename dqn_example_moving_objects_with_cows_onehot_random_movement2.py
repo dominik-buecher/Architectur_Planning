@@ -13,7 +13,9 @@ print("GPU support: ", torch.cuda.is_available())
 
 n_rows = 10
 n_cols = 10
-N_COWS = 2
+N_COWS = 4
+
+COW_HIT_COUNTER = 0
 
 from window_richard import *
 class GUI():
@@ -126,7 +128,7 @@ class DQNOneHot(nn.Module):
         # self.fc3 = nn.Linear(128, output_size)
 
         # works quite well
-        self.fc1 = nn.Linear(input_size*2*10, 128) # 10 times, as input will be one-hot-encoded
+        self.fc1 = nn.Linear(input_size, 128) # 10 times, as input will be one-hot-encoded
         self.fc2 = nn.Linear(128, output_size)
         self.fc1.reset_parameters()
         self.fc2.reset_parameters()
@@ -136,28 +138,12 @@ class DQNOneHot(nn.Module):
         
         global N_COWS
         
-        # # calculate distance to COWs
-        # for i in range(N_COWS):
-        #     # X distance
-        #     x[i+0] = x[i+0] - x[0]
-        #     # Y distance
-        #     x[i+1] = x[i+1] - x[1]
-        # distances can be negative, therefore encode with sigmoid rather than relu
-        # x = F.sigmoid(self.fc1(x.view(-1, self.fc1.in_features)))
-
-        # simply one-hot-encode distance and position
-        print(x)
-        for input in x:
-            array = []
-            for i in input:
-                encoded = F.one_hot(i, num_classes=10)
-                print(encoded)
-
-            # for i in input:
-            #     print(i)
-
-        x = F.one_hot(x.view(-1, self.fc1.in_features), num_classes=10)
-        x = F.relu(self.fc1(x))
+        # get an input
+        # print(x)
+        # print(x.shape)
+        input_tensor = x.view(-1, (2 + 2*N_COWS)*10 + n_rows*n_cols)
+        
+        x = F.sigmoid(self.fc1(input_tensor.view(-1, self.fc1.in_features)))
 
         # x = F.sigmoid(self.fc1(x.view(-1, self.fc1.in_features)))
         # x = self.fc1(x.view(-1, self.fc1.in_features))
@@ -166,11 +152,14 @@ class DQNOneHot(nn.Module):
 
 
 
+
 class PathFinder():
     def __init__(self):
         # Define the environment
-        self.n_rows = 10
-        self.n_cols = 10
+        global n_rows
+        global n_cols
+        self.n_rows = n_rows
+        self.n_cols = n_cols
         # n_states = n_rows * n_cols
         self.n_actions = 5
         self.actions = ['Up', 'Down', 'Left', 'Right', 'Stop']
@@ -185,7 +174,7 @@ class PathFinder():
         
         self.goal_reached_counter = 0
 
-        self.fields_travelled = []
+        self.fields_travelled = np.zeros(self.n_rows*self.n_cols)
 
     # fields_travelled = []
         
@@ -258,6 +247,18 @@ class PathFinder():
             return True
         else:
             return False
+    
+    def hit_field(self, row, col):
+        self.fields_travelled[row*self.n_cols + col] = 1.0
+
+    def has_hit_any_field(self):
+        temp = all([f == 1.0 for f in self.fields_travelled])
+        if temp:
+            print("GOAL GOAL GOAL")
+        return temp
+    
+    def has_hit_field(self, row, col):
+        return (self.fields_travelled[row*self.n_cols + col] == 1.0)
 
 
     def get_reward_for_field(self, row_idx, col_idx, action):
@@ -265,38 +266,33 @@ class PathFinder():
         ideal_action = self.get_ideal_action(row_idx, col_idx)
         
         if self.is_allowed_action(row_idx, col_idx, action):
-            if action == ideal_action:
-                reward = 4
-            elif action == 4: # stop
-                reward = -2
+            if self.is_goal_reached(row_idx, col_idx):
+                
+                if not self.has_hit_field(row_idx, col_idx):
+                    if self.has_hit_any_field():
+                        reward = 300
+                        self.hit_field(row_idx, col_idx)
             else:
-                reward = -4
-            if self.would_hit_cow(row_idx, col_idx, action):
-                reward -= 20
-                print(datetime.datetime.now().strftime("%M:%S"), "Cow hit.....")
-            if (row_idx, col_idx) in self.fields_travelled:
-                reward -= 5
+                if self.would_hit_cow(row_idx, col_idx, action):
+                    reward += -25
+                    global COW_HIT_COUNTER
+                    COW_HIT_COUNTER += 1
+                    # print(datetime.datetime.now().strftime("%M:%S"), "Cow hit.....")
+                if not self.has_hit_field(row_idx, col_idx):
+                    reward += -5
+                else:
+                    if action == ideal_action:
+                        reward += 8
+                    elif action == 4: #stop
+                        reward += -4
+                    else:
+                        reward += -8
         else:
-            reward = -30
+            reward = -40
 
         return reward
 
 
-        # if rewards[row_idx][col_idx] == 0:
-        #     return -1
-        # else:
-        # r = self.rewards[row_idx][col_idx]
-        # self.rewards[row_idx][col_idx] = -1
-        # return r
-
-    # def is_goal_reached(self, reward):
-    #     if reward == self.goal_reward:
-    #         self.goal_reached_counter += 1
-    #         # print("goal reached!!")
-    #         return True
-    #     else:
-    #         return False
-    
     def is_goal_reached(self, row, col):
         goal_row, goal_col = self.goal_field
         if goal_row == row and goal_col == col:
@@ -305,7 +301,24 @@ class PathFinder():
             return True
         else:
             return False
+
+    def generate_state_tensor(self, coordinates, field_states):
+        coord_tensor = torch.tensor(
+            coordinates, dtype=torch.float32
+        )
+        # encode coords one-hot
+        coord_tensor = F.one_hot(coord_tensor.long(), num_classes=n_rows).float()
+
+        field_states_tensor = torch.tensor(
+            field_states, dtype=torch.float32
+        )
+        coord_tensor = coord_tensor.view((1+N_COWS)*2*10)
+        # print(coord_tensor)
+        # print(field_states_tensor)
+        state_tensor = torch.cat((coord_tensor, field_states_tensor))
+        return state_tensor
         
+
 
     def run(self):
         # Define the action-to-index dictionary
@@ -323,14 +336,14 @@ class PathFinder():
         epsilon_decay = 0.999998
         min_epsilon = 0.03
         # guided_epsilon_probability = 0.9
-        guided_epsilon_probability = 0.5
+        guided_epsilon_probability = 0.3
         # epsilon_decay = 0.999998
         # min_epsilon = 0.1
         alpha = 0.20
         batch_size = 32
         target_update = 100
         max_episodes = 8500
-        learning_rate = 0.0005
+        learning_rate = 0.0003
         # max_episodes = 4000
 
         # Initialize replay memory
@@ -338,15 +351,15 @@ class PathFinder():
         replay_memory = []
 
         # Define named tuple for experience replay
-        Transition = namedtuple('Transition', ('state_idx', 'state_indexes_cows', 'action', 'next_state_idx', 'reward', 'done'))
+        Transition = namedtuple('Transition', ('state_idx', 'state_indexes_cows', 'states_fields', 'action', 'next_state_idx', 'reward', 'done'))
 
         # Initialize DQN and target DQN
-        input_size = 1+N_COWS  # State_idx_mower + 4x State_idx_cow
+        input_size = (1+N_COWS)*2*10 + self.n_rows*self.n_cols  # State_idx_mower + 4x State_idx_cow
         output_size = self.n_actions
-        dqn = DQN(input_size, output_size)
-        target_dqn = DQN(input_size, output_size)
-        # dqn = DQNOneHot(input_size, output_size)
-        # target_dqn = DQNOneHot(input_size, output_size)
+        # dqn = DQN(input_size, output_size)
+        # target_dqn = DQN(input_size, output_size)
+        dqn = DQNOneHot(input_size, output_size)
+        target_dqn = DQNOneHot(input_size, output_size)
         target_dqn.load_state_dict(dqn.state_dict())
         target_dqn.eval()
         summary(target_dqn)
@@ -405,9 +418,11 @@ class PathFinder():
             else:
                 # Take action proposed by DQN
                 # print("Taking proposed action..")
-                state_tensor = torch.tensor(
-                    list(get_coord_from_state(state)) + 
-                    [xy for coords in g.get_cow_positions() for xy in coords], dtype=torch.float32)  # Wrap the state in a tensor
+                
+                state_tensor = self.generate_state_tensor(
+                    list(get_coord_from_state(state)) + [xy for coords in g.get_cow_positions() for xy in coords],
+                    self.fields_travelled
+                ) # Wrap the state in a tensor
                 # print(state_tensor)
                 q_values = dqn(state_tensor)
                 max_action = q_values.argmax().item()
@@ -443,15 +458,18 @@ class PathFinder():
             
             global winHandle
             g.set_mower_abs(next_row, next_col)
-            g.move_cows()
+            if random.uniform(0,1) < 0.30:
+                g.move_cows()
             time.sleep(sleep_time_ms/1000)
             # g.update()
-            self.fields_travelled.append((next_row, next_col))
+            self.hit_field(next_row, next_col)
             return next_state_idx, next_row, next_col
 
         def reset_env():
             g.reset()
-            self.fields_travelled = []
+            self.fields_travelled = np.zeros(self.n_rows * self.n_cols) 
+            self.hit_field(0,0)
+            
             # g.update()
         
         def do_test():
@@ -465,12 +483,14 @@ class PathFinder():
             step_count = 0
 
             while not done:
-                state_tensor = torch.tensor(
-                    list(get_coord_from_state(state)) + 
-                    [xy for coords in g.get_cow_positions() for xy in coords], dtype=torch.float32)  # Wrap the state in a tensor
+                state_tensor = self.generate_state_tensor(
+                    list(get_coord_from_state(state)) + [xy for coords in g.get_cow_positions() for xy in coords],
+                    self.fields_travelled
+                ) # Wrap the state in a tensor
+                
                 # print(state_tensor)
                 q_values = dqn(state_tensor)
-                print(q_values)
+                # print(q_values)
                 action = q_values.argmax().item()
                 next_row, next_col = calculate_next_state(state, action)
                 action = torch.topk(q_values, 2).indices[0, 1].item() if next_row < 0 or next_row >= self.n_rows or next_col < 0 or next_col >= self.n_cols else action
@@ -487,7 +507,7 @@ class PathFinder():
 
                 state = next_state_idx
                 step_count += 1
-                done = True if step_count > 110 else done
+                done = True if step_count > 110 else self.has_hit_any_field()
                 # print("finished")
                 # print("step_count", step_count)
                 # print("(next_row == self.goal_field[0] and next_col == self.goal_field[1])", (next_row == self.goal_field[0] and next_col == self.goal_field[1]))
@@ -527,7 +547,7 @@ class PathFinder():
                 # print("Got reward", reward, "for moving", index_to_action[action])
                 
                 # Store transition in replay memory
-                transition = Transition(state_idx, [get_state_from_coord(c[0], c[1]) for c in g.get_cow_positions()], action, next_state_idx, reward, done)
+                transition = Transition(state_idx, [get_state_from_coord(c[0], c[1]) for c in g.get_cow_positions()], self.fields_travelled, action, next_state_idx, reward, done)
                 # print("Adding transition", transition)
                 # print(g.get_cow_positions())
                 replay_memory.append(transition)
@@ -540,14 +560,16 @@ class PathFinder():
                     # state_batch = torch.tensor([t.state_idx for t in transitions], dtype=torch.float32)
                     # for t in transitions:
                     #     print(t.state_indexes_cows)
-                    state_batch = torch.tensor([[t.state_idx] + (t.state_indexes_cows) for t in transitions], dtype=torch.float32)
-                    state_batch = torch.tensor(
-                        [
-                            list(get_coord_from_state(t.state_idx)) + 
-                            [xy for state_idxes in t.state_indexes_cows for xy in get_coord_from_state(state_idxes)]
-                            for t in transitions
-                        ], dtype=torch.float32
-                    )
+                    state_batch = [] # torch.tensor([], dtype=torch.float32)
+                    for t in transitions:
+                        state_tensor = self.generate_state_tensor(
+                            list(get_coord_from_state(t.state_idx)) + [xy for state_idxes in t.state_indexes_cows for xy in get_coord_from_state(state_idxes)],
+                            t.states_fields
+                        )
+                        state_batch.append(state_tensor.numpy())
+                    state_batch = torch.tensor(state_batch, dtype=torch.float32)
+
+                    # print(state_batch)
 
                     # list(get_coord_from_state(state)) + 
                     # [xy for coords in g.get_cow_positions() for xy in coords], dtype=torch.float32)  # Wrap the state in a tensor
@@ -555,14 +577,15 @@ class PathFinder():
 
                     action_batch = torch.tensor([t.action for t in transitions], dtype=torch.int64).unsqueeze(1)
                     reward_batch = torch.tensor([t.reward for t in transitions], dtype=torch.float32)
-                    next_state_batch = torch.tensor(
-                        [
-                            list(get_coord_from_state(t.next_state_idx)) +
-                            [xy for state_idxes in t.state_indexes_cows for xy in get_coord_from_state(state_idxes)]
-                            for t in transitions
-                        ], 
-                        dtype=torch.float32
-                    )
+                    next_state_batch = []
+                    for t in transitions:
+                        state_tensor = self.generate_state_tensor(
+                            list(get_coord_from_state(t.next_state_idx)) + [xy for state_idxes in t.state_indexes_cows for xy in get_coord_from_state(state_idxes)],
+                            t.states_fields
+                        )
+                        next_state_batch.append(state_tensor.numpy())
+                    next_state_batch = torch.tensor(next_state_batch, dtype=torch.float32)
+                    
                     done_batch = torch.tensor([t.done for t in transitions], dtype=torch.float32)
                     # print("state_batch = ", state_batch.shape)
                     # print("action_batch = ", action_batch.shape)
@@ -598,6 +621,8 @@ class PathFinder():
 
                 if step_count > 400:  # Terminate the episode if steps exceed 20
                     done = True
+                else:
+                    done = self.has_hit_any_field()
 
                 # Decay epsilon
                 epsilon = max(min_epsilon, epsilon * epsilon_decay)
@@ -609,6 +634,8 @@ class PathFinder():
                 print("Number of trained episodes: ", episode_idx+1)
                 print("Current epsilon =", epsilon)
                 print("Goal reached:", self.goal_reached_counter, "times")
+                global COW_HIT_COUNTER
+                print("COW_HIT_COUNTER", COW_HIT_COUNTER)
                 time.sleep(2.5)
                 do_test()
                 time.sleep(2.5)

@@ -136,32 +136,20 @@ class DQNOneHot(nn.Module):
         
         global N_COWS
         
-        # # calculate distance to COWs
-        # for i in range(N_COWS):
-        #     # X distance
-        #     x[i+0] = x[i+0] - x[0]
-        #     # Y distance
-        #     x[i+1] = x[i+1] - x[1]
-        # distances can be negative, therefore encode with sigmoid rather than relu
-        # x = F.sigmoid(self.fc1(x.view(-1, self.fc1.in_features)))
+        # get an input
+        input_tensor = x.view(-1, 2 + 2*N_COWS)
+        input_tensor = input_tensor.long()
 
-        # simply one-hot-encode distance and position
-        print(x)
-        for input in x:
-            array = []
-            for i in input:
-                encoded = F.one_hot(i, num_classes=10)
-                print(encoded)
-
-            # for i in input:
-            #     print(i)
-
-        x = F.one_hot(x.view(-1, self.fc1.in_features), num_classes=10)
-        x = F.relu(self.fc1(x))
+        # encode coords one-hot
+        one_hot_encoded = F.one_hot(input_tensor, num_classes=10).float()
+        # print(one_hot_encoded)
+        
+        x = F.sigmoid(self.fc1(one_hot_encoded.view(-1, self.fc1.in_features)))
 
         # x = F.sigmoid(self.fc1(x.view(-1, self.fc1.in_features)))
         # x = self.fc1(x.view(-1, self.fc1.in_features))
         return self.fc2(x)
+
 
 
 
@@ -343,10 +331,10 @@ class PathFinder():
         # Initialize DQN and target DQN
         input_size = 1+N_COWS  # State_idx_mower + 4x State_idx_cow
         output_size = self.n_actions
-        dqn = DQN(input_size, output_size)
-        target_dqn = DQN(input_size, output_size)
-        # dqn = DQNOneHot(input_size, output_size)
-        # target_dqn = DQNOneHot(input_size, output_size)
+        # dqn = DQN(input_size, output_size)
+        # target_dqn = DQN(input_size, output_size)
+        dqn = DQNOneHot(input_size, output_size)
+        target_dqn = DQNOneHot(input_size, output_size)
         target_dqn.load_state_dict(dqn.state_dict())
         target_dqn.eval()
         summary(target_dqn)
