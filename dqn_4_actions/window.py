@@ -80,8 +80,9 @@ class GridWindow:
             current_row = cow["cow"].grid_info()["row"]
             current_col = cow["cow"].grid_info()["column"]
 
-            new_row = current_row
+            direction = random.choice(["up", "down", "left", "right"])
             new_col = current_col
+            new_row = current_row
 
             if direction == "up":
                 new_row = max(0, current_row - 1)
@@ -97,7 +98,14 @@ class GridWindow:
                     and not (self.target is not None and self.target.grid_info()["row"] == new_row and self.target.grid_info()["column"] == new_col):
                 cow["cow"].grid(row=new_row, column=new_col)
             else:
-                cow["direction"] = random.choice(["up", "down", "left", "right"])
+                cow["cow"].grid(row=current_row, column=current_col)
+
+
+
+
+
+
+
 
     def move_mower(self, event):
         current_row = self.mower.grid_info()["row"]
@@ -182,8 +190,8 @@ class GridWindow:
 
 
 
-    def get_reward(self, state, future_row, future_col):
-        
+    def get_reward(self, state, future_row, future_col, action, action_counter):
+        reward = 0
         row_cow = []
         col_cow = []
 
@@ -195,6 +203,14 @@ class GridWindow:
 
         row = state[0]
         col = state[1]
+
+        if row % 2 != 0:
+            if row == future_row and col + 1 == future_col:
+                reward = 30
+        else:
+            if row == future_row and col - 1 == future_col:
+                reward = 30
+
 
         for i in range(2, len(state) - 2, 2):
             row_cow.append(state[i])
@@ -203,23 +219,65 @@ class GridWindow:
         # state = [mower_row, mower_col, cow1_row, cow1_col, cow2_row, cow2_col, ..., target_row, target_col, 0, 1, 0, 1, ...]
 
         if (future_row, future_col) in zip(row_cow, col_cow):
-            reward = -10
+            reward += -10
 
         visited_status = state[-(self.rows * self.cols):]
 
         # Überprüfe, ob das Feld an der Position des Rasenmähers besucht wurde
         if visited_status[future_row * self.cols + future_col] == 1:
-            reward = -5
+            reward += -1
         else:
-            reward = 5
+            # if action == 2 or action == 3:
+            #     reward += 30
+            # else:
+            #     reward += 10
+            reward += 10
+            
+            if row % 2 != 0:
+                if row == future_row and col + 1 == future_col:
+                    reward += 50
+            else:
+                if row == future_row and col - 1 == future_col:
+                    reward += 50
+
+
+        # alle_besucht = all(state[12:])
+
+        # if alle_besucht is True:
+        #     reward += 5000
 
         if row == self.target.grid_info()["row"] and col == self.target.grid_info()["column"]:
 
-            alle_besucht = all(state[12:])
+            # alle_besucht = all(state[12:])
 
             # if alle_besucht is True:
-            #     reward = 1000
-            reward = 5000
+            #      reward += 5000
+            #reward += 5000
+            #reward += 1000 + 10 * (self.rows * self.cols - visited_status.count(0))
+
+
+            base_reward = 500
+            max_multiplier = 20
+            multiplier_threshold = 1000
+
+            # Berechnen Sie den Multiplikator basierend auf dem action_counter
+            multiplier = max(1, max_multiplier - (action_counter / multiplier_threshold))
+
+            # Berechnen Sie den endgültigen Reward
+            reward += base_reward * multiplier
+            print("reward: ", reward)
+
+
+        # Belohne, wenn der Roboter eine Zeile nach der anderen abfährt
+        if action == 3 and col == self.cols - 1:
+            # Überprüfe, ob alle Felder in der aktuellen Zeile abgefahren wurden
+            if all(visited_status[row * self.cols : (row + 1) * self.cols]):
+                reward += 50  # Belohne das vollständige Abfahren der aktuellen Zeile
+        elif action == 2 and col == 0:
+            # Überprüfe, ob alle Felder in der aktuellen Zeile abgefahren wurden
+            if all(visited_status[row * self.cols : (row + 1) * self.cols]):
+                reward += 50  # Belohne das vollständige Abfahren der aktuellen Zeile
+
 
         return reward
     
@@ -245,6 +303,12 @@ class GridWindow:
         # Setze die Position des Rasenmähers zurück
         self.mower.grid(row=initial_state[0], column=initial_state[1])
 
+    def is_field_visited(self, state, rows, cols):
+        # Extrahiere den Besuchsstatus-Teil des Zustandsvektors
+        visited_status = state[-(rows * cols):]
+
+        # Überprüfe, ob alle Felder (außer dem Ziel) besucht wurden
+        return all(visited_status[:-2])  # Ignoriere die letzten beiden Werte (Ziel) beim Überprüfen
 
 
     

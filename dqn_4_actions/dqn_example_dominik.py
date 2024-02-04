@@ -5,6 +5,7 @@ import torch.nn.functional as F
 import random
 from collections import namedtuple
 import tkinter as tk
+import keyboard
 from window import *
 
 
@@ -92,6 +93,16 @@ class DQNAgent:
     
     
     # Zufällige Aktion auswählen oder Aktion wählen die den Höchsten q-Value hat
+    # def select_action(self, state):
+    #     if random.random() < self.epsilon:
+    #         # Wähle zufällig eine Aktion basierend auf der individuellen Verteilung
+    #         action_probs = [0.15, 0.15, 0.35, 0.35]  # Beispiel: höhere Wahrscheinlichkeit für Aktionen 2 und 3
+    #         return random.choices(range(self.output_size), weights=action_probs)[0]
+    #     else:
+    #         with torch.no_grad():
+    #             state_tensor = torch.tensor([state], dtype=torch.float32).to(self.device)
+    #             q_values = self.policy_net(state_tensor)
+    #             return q_values.argmax().item()
     def select_action(self, state):
         if random.random() < self.epsilon:
             return random.randint(0, self.output_size - 1)
@@ -148,7 +159,7 @@ train = True
 # training ausführen
 if train is True:
     initial_state = grid_window.get_state()
-    max_episodes = 1000
+    max_episodes = 350
     for episode in range(max_episodes):
         # aktuellen state laden
         state = initial_state
@@ -172,12 +183,13 @@ if train is True:
 
             next_state = grid_window.get_state()  # Update the state
             # Berechne Reward basierend auf dem zukünftigen Zustand 
-            reward = grid_window.get_reward(state, next_row, next_col)
+            reward = grid_window.get_reward(state, next_row, next_col, action, action_counter)
             
             # Wenn Reward = 500 erreicht ist oder 1000 Aktionen durchgeführt wurden -> Schleife abbrechen
-            done = True if reward >= 500 or action_counter >= 10000 else False
+            #done = True if reward >= 5000 else False
+            done = True if grid_window.is_field_visited(state, 20, 20) is True and next_row == grid_window.target.grid_info()["row"] and next_col == grid_window.target.grid_info()["column"] else False
             #print("reward: ", reward)
-            
+        
             # Fügt den durchlauf als Transition in die Memory hinzu
             dqn_agent.memory.push(state, action, next_state, reward, done)
             
@@ -195,13 +207,21 @@ if train is True:
         if episode % 10 == 0:
             dqn_agent.update_target_net()
 
+        if keyboard.is_pressed('s'):
+            print("Saving model...")
+            torch.save(dqn_agent.policy_net.state_dict(), 'models/dqn_model3.pth')
+            print("Model saved!")
+
     # trainiertes Modell speichern
-    torch.save(dqn_agent.policy_net.state_dict(), 'models/dqn_model.pth')
+    torch.save(dqn_agent.policy_net.state_dict(), 'models/dqn_model3.pth')
 
 else:
     # trainierted Modell laden
-    loaded_state_dict = torch.load('models/dqn_model.pth')
+    loaded_state_dict = torch.load('models/dqn_model3.pth')
     dqn_agent.policy_net.load_state_dict(loaded_state_dict)
+
+
+
 
 # Wird verwendet um die SChritte des Agent in dem Enviorment darzustellen
 def play_environment(grid_window, actions, index_to_action):
@@ -230,31 +250,41 @@ def play_environment(grid_window, actions, index_to_action):
 
 
 
-generated_actions = []
+#generated_actions = []
 state = grid_window.get_state()
 done = False
 total_reward = 0
-
+action_counter = 0
 while not done:
     # Aktion wählen
     action = dqn_agent.select_action(state)
+    action_counter += 1
+    print("action; ", action)
     
     # Neuen Zustand wählen basierend auf der Aktion
     next_row, next_col = grid_window.get_future_state(state, action)
+
+    grid_window.move_mower_abs(next_row, next_col)
+    grid_window.move_cows()
+    grid_window.root.update()
+    grid_window.root.after(100)
+    
     next_state = grid_window.get_state()
     
     # Alle Aktionen abspeichern
-    generated_actions.append(index_to_action[action])
-    state = next_state
+    #generated_actions.append(index_to_action[action])
+
     
     # Reward berechnen basierend auf der Aktino
-    reward = grid_window.get_reward(state, next_row, next_col)
+    reward = grid_window.get_reward(state, next_row, next_col, action, action_counter)
     total_reward += reward
+
     
     # Abbruchbedingung prüfen: Ziel erreicht? oder Reward über 100
-    done = True if state[-1] == 1 or total_reward > 100 else False  # Check if target reached or reward > 1000
+    done = True if state[-1] == 1  else False #or total_reward > 100 # Check if target reached or reward > 1000
     print("total_reward: ", total_reward)
+    state = next_state
     
-print("Generated Actions:", generated_actions)
+# print("Generated Actions:", generated_actions)
 
-play_environment(grid_window, generated_actions, index_to_action)
+# play_environment(grid_window, generated_actions, index_to_action)
