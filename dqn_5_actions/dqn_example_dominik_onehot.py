@@ -7,8 +7,7 @@ from collections import namedtuple
 import tkinter as tk
 import keyboard
 import math
-from window import *
-
+from window_onehot import *
 
 rows = 20
 cols = 20
@@ -17,8 +16,7 @@ n_actions = 5
 num_cows = 0
 input_size = (n_states + 4 + (2 * num_cows))  # Zustand + Positionen der Kühe
 output_size = n_actions
-
-
+coordinates = 4 + (2 * num_cows)
 root = tk.Tk()
 root.title("Grid Window with Cows, Mower, and Target")
 # Erstellen des Enviroments
@@ -40,29 +38,24 @@ class DQN(nn.Module):
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward', 'done'))
 
 # ReplayMemory wird verwendet damit der Agent aus alten Erfahrungen lernen kann
-# Erklärung -> https://deeplizard.com/learn/video/Bcuj2fTH4_4
-# -> https://www.kaggle.com/code/viznrvn/deep-q-learning-with-experience-replay-theory
 class ReplayMemory:
     def __init__(self, capacity):
         self.capacity = capacity
         self.memory = []
         self.position = 0
-    # push fügt eine neue Erfahrung/Transition zur Memory hinzu
+
     def push(self, *args):
         if len(self.memory) < self.capacity:
             self.memory.append(None)
         self.memory[self.position] = Transition(*args)
         self.position = (self.position + 1) % self.capacity
 
-    # Wählt zufällig eine Stichprobe von Erfahrungen aus der Memory
     def sample(self, batch_size):
         return random.sample(self.memory, batch_size)
 
 # Definiere den DQN agent
-# openai gym agent oder stable baseline agent ausprobieren
 class DQNAgent:
     def __init__(self, input_size, output_size, capacity=30000, batch_size=32, gamma=0.999, epsilon=1.0, epsilon_decay=0.999, min_epsilon=0.1):
-        # Parameter festlegen
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.input_size = input_size
         self.output_size = output_size
@@ -72,67 +65,34 @@ class DQNAgent:
         self.min_epsilon = min_epsilon
         self.batch_size = batch_size
 
-        # Erstelle DQN um Aktionen basierend auf dem aktuellen Zustand vorherzusagen
         self.policy_net = DQN(input_size, output_size).to(self.device)
-        
-        # Erstelle DQN um Zielwerte für das Q-Lernverfahren bereitzustellen
-        # -> Gewichte des Target-Netzwerks werden periodisch mit den Gewichten des Policy-Netzwerks synchronisiert
         self.target_net = DQN(input_size, output_size).to(self.device)
-        
-        # Target Netz mit Gewichten des Policy Netzes synchronisieren
         self.target_net.load_state_dict(self.policy_net.state_dict())
-        
-        # Wird in Evaluierungsmodus gesetz damit die Gewichte nicht aktualisiert werden
         self.target_net.eval()
-        
-        # Optimierer für das Policy Netz 
-        # -> Optimierer optimiert die Gewichte des Netzes aufgrund der Loss Funktion
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=0.001)
-        
-        # Memory erstellen mit Maixmalen Wert an Erfahrungen die gesammelt werden können
         self.memory = ReplayMemory(capacity)
-    
-    
-    # Zufällige Aktion auswählen oder Aktion wählen die den Höchsten q-Value hat
-    # def select_action(self, state):
-    #     if random.random() < self.epsilon:
-    #         # Wähle zufällig eine Aktion basierend auf der individuellen Verteilung
-    #         action_probs = [0.15, 0.15, 0.35, 0.35]  # Beispiel: höhere Wahrscheinlichkeit für Aktionen 2 und 3
-    #         return random.choices(range(self.output_size), weights=action_probs)[0]
-    #     else:
-    #         with torch.no_grad():
-    #             state_tensor = torch.tensor([state], dtype=torch.float32).to(self.device)
-    #             q_values = self.policy_net(state_tensor)
-    #             return q_values.argmax().item()
+
     def select_action(self, state):
         if random.random() < self.epsilon:
             return random.randint(0, self.output_size - 1)
         else:
             with torch.no_grad():
-                state_tensor = torch.tensor([state], dtype=torch.float32).to(self.device)
+                state_tensor = F.one_hot(torch.tensor([state]), num_classes=rows).float().to(self.device)
                 q_values = self.policy_net(state_tensor)
                 return q_values.argmax().item()
-    
-    def select_action_Netz(self, state):
-        with torch.no_grad():
-            state_tensor = torch.tensor([state], dtype=torch.float32).to(self.device)
-            q_values = self.policy_net(state_tensor)
-            return q_values.argmax().item()
-    
-    # trainiert den agent -> Zufälliger Wert aus Memory wählen zum verbessern
+
+
     def train(self):
         if len(self.memory.memory) < self.batch_size:
             return
-        
-        # Wählt zufällige Erfahrung aus Memory 
+
         transitions = self.memory.sample(self.batch_size)
 
-        # Erstellt Liste/Batch mit den Transtions
         batch = Transition(*zip(*transitions))
-        state_batch = torch.tensor(batch.state, dtype=torch.float32).to(self.device)
+        state_batch = F.one_hot(torch.tensor(batch.state), num_classes=rows).float().to(self.device)
         action_batch = torch.tensor(batch.action, dtype=torch.int64).unsqueeze(1).to(self.device)
         reward_batch = torch.tensor(batch.reward, dtype=torch.float32).to(self.device)
-        next_state_batch = torch.tensor(batch.next_state, dtype=torch.float32).to(self.device)
+        next_state_batch = F.one_hot(torch.tensor(batch.next_state), num_classes=rows).float().to(self.device)
         done_batch = torch.tensor(batch.done, dtype=torch.float32).to(self.device)
 
         q_values = self.policy_net(state_batch).gather(1, action_batch)
@@ -144,32 +104,30 @@ class DQNAgent:
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
-    # Aktualisieren des Netzes mit den neuen Gewichten
+
+
     def update_target_net(self):
         self.target_net.load_state_dict(self.policy_net.state_dict())
-    # Reduzieren des Wahrscheinlichkeit für eine zufällige aktion
+
     def decay_epsilon(self):
         self.epsilon = max(self.min_epsilon, self.epsilon * self.epsilon_decay)
-
-
 
 
 n_actions = 5
 index_to_action = {0: 'Up', 1: 'Down', 2: 'Left', 3: 'Right', 4: 'Stay'}
 
-
 # Create the DQN agent
-dqn_agent = DQNAgent(input_size, output_size)
+dqn_agent = DQNAgent(n_states, output_size)
 # loaded_state_dict = torch.load('models/dqn_model_standart_cow0_1.pth')
 # dqn_agent.policy_net.load_state_dict(loaded_state_dict)
 
 
-#train = True
-train = False
+train = True
+#train = False
 
-# training ausführen
-if train is True:
-    initial_state = grid_window.get_state()
+if train:
+    initial_state = grid_window.get_state(coordinates)
+    print("initial_state: ", initial_state)
     max_episodes = 50000
     max_actions = 9000
     for episode in range(max_episodes):
@@ -190,23 +148,25 @@ if train is True:
             # Erhalte zukünfitgen State welcher durch die Aktion erreicht wird
             next_row, next_col = grid_window.get_future_state(state, action)
 
-            grid_window.move_mower_abs(next_row, next_col)
+            grid_window.move_mower_abs(next_row, next_col, coordinates)
             grid_window.move_cows()
             grid_window.root.update()
             grid_window.root.after(1)
 
-            next_state = grid_window.get_state()  # Update the state
+            next_state = grid_window.get_state(coordinates)  # Update the state
+            
+            # One-Hot-Kodierung des Zustands
+            state_one_hot = F.one_hot(torch.tensor([state]), num_classes=rows).float().to(dqn_agent.device)
+            next_state_one_hot = F.one_hot(torch.tensor([next_state]), num_classes=rows).float().to(dqn_agent.device)
+
             # Berechne Reward basierend auf dem zukünftigen Zustand 
             reward, consecutive_unvisited_count = grid_window.get_reward(state, next_row, next_col, action, action_counter, num_cows, consecutive_unvisited_count)
             
             # Wenn Reward = 500 erreicht ist oder 1000 Aktionen durchgeführt wurden -> Schleife abbrechen
             #done = True if reward >= 5000 else False
-
-            
-
             done = True if grid_window.is_90_percent_visited(state, 20, 20) is True and next_row == grid_window.target.grid_info()["row"] and next_col == grid_window.target.grid_info()["column"] else False
             visited = grid_window.is_single_field_visited(state, next_row, next_col, 20, 20)
-           
+            
             if not (state[0] == next_row and state[1] == next_col):
                 if visited is True:
                     done = True
@@ -216,16 +176,14 @@ if train is True:
                 done = True
             
             # Fügt den durchlauf als Transition in die Memory hinzu
-            dqn_agent.memory.push(state, action, next_state, reward, done)
-
-            # Train Funktion von Agent aufrufen
+            dqn_agent.memory.push(state_one_hot, action, next_state_one_hot, reward, done)
             dqn_agent.train()
-
 
             total_reward += reward
          
             #print("action: ", action)
             state = next_state
+
         max_actions = max(4000, max_actions - 50)
         # Verringern der Wahrscheinlichkeit für zufällige Aktionen
         dqn_agent.decay_epsilon()
@@ -237,17 +195,11 @@ if train is True:
 
         if keyboard.is_pressed('q'):
             print("Saving model...")
-            torch.save(dqn_agent.policy_net.state_dict(), 'models/dqn_model_standart_cow0_2.pth')
+            torch.save(dqn_agent.policy_net.state_dict(), 'models/dqn_model_standart_cow0_1.pth')
             print("Model saved!")
 
     # trainiertes Modell speichern
-    torch.save(dqn_agent.policy_net.state_dict(), 'models/dqn_model_standart_cow0_2.pth')
-
-else:
-    # trainierted Modell laden
-    loaded_state_dict = torch.load('models/hardcore_model.pth')
-    dqn_agent.policy_net.load_state_dict(loaded_state_dict)
-
+    torch.save(dqn_agent.policy_net.state_dict(), 'models/dqn_model_standart_cow0_1.pth')
 
 
 # Wird verwendet um die SChritte des Agent in dem Enviorment darzustellen
@@ -260,17 +212,17 @@ def play_environment(grid_window, actions, index_to_action):
             action_index = next((index for index, act in index_to_action.items() if act == action), None)
             
             # Wähle neuen Zustand basierend auf der Aktion
-            future_row, future_col = grid_window.get_future_state(grid_window.get_state(), action_index)
+            future_row, future_col = grid_window.get_future_state(grid_window.get_state(coordinates), action_index)
             
             # Bewege Rasenmäher zu neuem Zustand
-            grid_window.move_mower_abs(future_row, future_col)
+            grid_window.move_mower_abs(future_row, future_col, coordinates)
         
         grid_window.move_cows()
         grid_window.root.update()
         grid_window.root.after(500)
 
         # Überprüfe, ob alle Felder besucht und Ziel erreicht
-        if grid_window.get_state()[-1] == 1 and grid_window.get_state()[-2] == 1:
+        if grid_window.get_state(coordinates)[-1] == 1 and grid_window.get_state(coordinates)[-2] == 1:
             print("Spiel beendet! Ziel erreicht und alle Felder besucht.")
             break
 
@@ -278,7 +230,7 @@ def play_environment(grid_window, actions, index_to_action):
 
 
 #generated_actions = []
-state = grid_window.get_state()
+state = grid_window.get_state(coordinates)
 done = False
 total_reward = 0
 action_counter = 0
@@ -292,12 +244,12 @@ while not done:
     # Neuen Zustand wählen basierend auf der Aktion
     next_row, next_col = grid_window.get_future_state(state, action)
 
-    grid_window.move_mower_abs(next_row, next_col)
+    grid_window.move_mower_abs(next_row, next_col, coordinates)
     grid_window.move_cows()
     grid_window.root.update()
     grid_window.root.after(100)
     
-    next_state = grid_window.get_state()
+    next_state = grid_window.get_state(coordinates)
     
     # Alle Aktionen abspeichern
     #generated_actions.append(index_to_action[action])

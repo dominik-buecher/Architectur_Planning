@@ -1,9 +1,14 @@
 import tkinter as tk
 import random
-
+import numpy as np
+import torch
+import torchvision.transforms.functional as F
+import torch.nn.functional as FF
 
 class GridWindow:
     def __init__(self, root, rows, cols, num_cows):
+        
+        self.state_size = 2 + 2 * num_cows + 2 * rows * cols  # 2 für Mower, 2 für jede Kuh, 2 für das Ziel, 2 für jedes Rasterfeld (One-Hot-kodiert)
         self.root = root
         self.rows = rows
         self.cols = cols
@@ -133,24 +138,44 @@ class GridWindow:
                 self.cells[new_row][new_col]["bg"] = "#006400"
 
     
-    def move_mower_abs(self, row, col):
-        # Kopiere den aktuellen Zustand
-        current_state = self.get_state()
+    # def move_mower_abs(self, row, col, coordinates):
+    #     # Kopiere den aktuellen Zustand
+    #     current_state = self.get_state(coordinates)
 
-        # Überprüfe, ob das Zielfeld bereits von einer Kuh besetzt ist
-        if any(c["cow"].grid_info()["row"] == row and c["cow"].grid_info()["column"] == col for c in self.cows):
-            # Wenn eine Kuh auf dem Zielfeld ist, kehre zum alten Zustand zurück und beende die Funktion
-            self.mower.grid(row=current_state[0], column=current_state[1])
-            return
+    #     # Überprüfe, ob das Zielfeld bereits von einer Kuh besetzt ist
+    #     if any(c["cow"].grid_info()["row"] == row and c["cow"].grid_info()["column"] == col for c in self.cows):
+    #         # Wenn eine Kuh auf dem Zielfeld ist, kehre zum alten Zustand zurück und beende die Funktion
+    #         self.mower.grid(row=current_state[0], column=current_state[1])
+    #         return
 
-        if self.cells[row][col]["bg"] == "green":
-            self.cells[row][col]["bg"] = "#006400"  # Ändere die Farbe auf "dunkelgrün"
+    #     if self.cells[row][col]["bg"] == "green":
+    #         self.cells[row][col]["bg"] = "#006400"  # Ändere die Farbe auf "dunkelgrün"
 
-        # Setze den Rasenmäher auf das Zielzellenfeld
-        self.mower.grid(row=row, column=col)
+    #     # Setze den Rasenmäher auf das Zielzellenfeld
+    #     self.mower.grid(row=row, column=col)
+
+    def move_mower_abs(self, row, col, coordinates):
+        # Prüfe, ob die nächste Position gültig ist
+        if 0 <= row < self.rows and 0 <= col < self.cols:
+            # Überprüfe, ob das Feld bereits besucht wurde
+            if self.cells[row.item()][col.item()]["bg"] == "green":
+                # Setze die Hintergrundfarbe des aktuellen Feldes auf "green"
+                current_row, current_col = coordinates[0].item(), coordinates[1].item()
+                self.cells[current_row][current_col]["bg"] = "green"
+
+                # Setze die Hintergrundfarbe des Zielfeldes auf "#006400"
+                self.cells[self.target.grid_info()["row"]][self.target.grid_info()["column"]]["bg"] = "#006400"
+
+                # Setze die Hintergrundfarbe des neuen Feldes auf "#FFFF00"
+                self.cells[row.item()][col.item()]["bg"] = "#FFFF00"
+
+                # Setze die Position des Rasenmähers auf das neue Feld
+                self.mower.grid(row=row.item(), column=col.item())
 
 
-    def get_state(self):
+
+
+    def get_state(self, coordinates):
         state = []
 
         # Füge Positionen des Rasenmähers, der Kühe und des Ziels hinzu
@@ -158,6 +183,7 @@ class GridWindow:
         for cow in self.cows:
             state.extend([cow["cow"].grid_info()["row"], cow["cow"].grid_info()["column"]])
         state.extend([self.target.grid_info()["row"], self.target.grid_info()["column"]])
+        
         # Füge den Besuchsstatus der Felder hinzu
         for row in range(self.rows):
             for col in range(self.cols):
@@ -165,7 +191,17 @@ class GridWindow:
                     state.append(1)  # Besucht
                 else:
                     state.append(0)  # Nicht besucht
-        return state
+
+        # Konvertiere die Liste in einen Tensor und wende die One-Hot-Kodierung an
+        state_tensor = torch.tensor(state[:coordinates])
+        print("state_tensor: ", state_tensor)
+        field_states_tensor = torch.tensor(state[coordinates:])
+        state_one_hot = FF.one_hot(state_tensor.long(), num_classes=self.rows).float()
+
+        state_one_hot = state_one_hot.view((1+1+self.num_cows)*2*self.cols)
+        state_tensor = torch.cat((state_one_hot, field_states_tensor))
+
+        return state_one_hot
 
     def get_future_state(self, current_state, action):
         # {0: 'Up', 1: 'Down', 2: 'Left', 3: 'Right', 4: 'Stay'}
@@ -283,12 +319,17 @@ class GridWindow:
             for col in range(self.cols):
                 self.cells[row][col]["bg"] = "green"
         self.cells[0][0]["bg"] = "#006400"
+
         # Setze die Positionen der Kühe zurück
-        for cow, initial_cow_position in zip(self.cows, initial_state[2:11:2]):
-            cow["cow"].grid(row=initial_cow_position, column=initial_state[initial_cow_position + 1])
+        cow_positions = initial_state[:self.num_cows*2]
+        for cow, cow_position in zip(self.cows, cow_positions):
+            cow["cow"].grid(row=int(cow_position.item()), column=int(cow_positions[cow_position + 1].item()))
 
         # Setze die Position des Rasenmähers zurück
-        self.mower.grid(row=initial_state[0], column=initial_state[1])
+        mower_position = initial_state[self.num_cows*2:self.num_cows*2 + 2]
+        self.mower.grid(row=int(mower_position[0].item()), column=int(mower_position[1].item()))
+
+
 
     def is_field_visited(self, state, rows, cols):
         # Extrahiere den Besuchsstatus-Teil des Zustandsvektors
