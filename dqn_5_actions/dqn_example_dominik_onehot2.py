@@ -168,7 +168,7 @@ def test_model(cows_pos):
         
         total_reward += reward
 
-        done = True if next_row == grid_window.target.grid_info()["row"] and next_col == grid_window.target.grid_info()["column"] else False
+        done = True if next_row == grid_window.target.grid_info()["row"] and next_col == grid_window.target.grid_info()["column"] or action_counter > 600 else False
         print("reward: ", reward)
         #print("total_reward: ", total_reward)
         state = next_state
