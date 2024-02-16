@@ -181,7 +181,7 @@ class GridWindow:
             cows_row.append(cow_row)
             cows_col.append(cow_col)
             # Setze 1 für Kuhpositionen
-            #tensor[cow_row, cow_col, 0] = 2
+            tensor[cow_row, cow_col, 0] = 1
             #tensor[cow_row, cow_col] = 1
         
         cows_pos = torch.tensor([cows_row, cows_col])
@@ -223,13 +223,13 @@ class GridWindow:
         if (mower_row == self.target.grid_info()["row"]) and (mower_col == self.target.grid_info()["column"]) and (temp_row == 13) and (temp_col == 14):
             mower_row = temp_row
             mower_col = temp_col
-        # # Falls sich eine kuh auf dem momentanen feld befindet, bleibt der mäher da stehen wo er ist
-        # for cow in self.cows:
-        #     cow_row = cow["cow"].grid_info()["row"]
-        #     cow_col = cow["cow"].grid_info()["column"]
-        #     if (mower_row == cow_row) and (mower_col == cow_col):
-        #         mower_row = row_tmp
-        #         mower_col = col_tmp
+        # Falls sich eine kuh auf dem momentanen feld befindet, bleibt der mäher da stehen wo er ist
+        for cow in self.cows:
+            cow_row = cow["cow"].grid_info()["row"]
+            cow_col = cow["cow"].grid_info()["column"]
+            if (mower_row == cow_row) and (mower_col == cow_col):
+                mower_row = temp_row
+                mower_col = temp_col
 
         return mower_row, mower_col
 
@@ -246,8 +246,8 @@ class GridWindow:
         for cow in self.cows:
             cow_row = cow["cow"].grid_info()["row"]
             cow_col = cow["cow"].grid_info()["column"]
-            if (future_row == cow_row) and (future_col == cow_col):
-                reward -= 1
+            # if (future_row == cow_row) and (future_col == cow_col):
+            #     reward -= 1
 
         if not((mower_row == future_row) and (mower_col == future_col) and (action ==  4)):
             if self.cells[future_row][future_col]["bg"] == "#006400": 

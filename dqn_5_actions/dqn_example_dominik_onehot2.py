@@ -9,6 +9,7 @@ import tkinter as tk
 import keyboard
 import math
 import json
+import time
 from window_onehot2 import *
 
 LOSS = []
@@ -16,7 +17,7 @@ rows = 15
 cols = 15
 n_states = rows * cols
 n_actions = 5 
-num_cows = 0
+num_cows = 2
 input_channels = 2  # Zustand + Positionen der Kühe
 output_size = n_actions
 length_state = 4 + (2 * num_cows)
@@ -135,12 +136,16 @@ class DQNAgent:
 
 
 def test_model(cows_pos):
+
+    # Verzögerung von 1 Sekunde
+    
     grid_window.reset_to_initial_state(cows_pos)
     #generated_actions = []
     state = grid_window.get_state()
     done = False
     total_reward = 0
     action_counter = 0
+    i = 1
     while not done:
         # Aktion wählen
         action = dqn_agent.select_action_netz(state)
@@ -150,11 +155,14 @@ def test_model(cows_pos):
         # Neuen Zustand wählen basierend auf der Aktion
         next_row, next_col = grid_window.get_future_state(action)
         reward = grid_window.get_reward(next_row, next_col, action)
-
+        # if i == 1:
+        #     grid_window.root.update()
+        #     time.sleep(10)
+        #     i = 2
         grid_window.move_mower_abs(next_row, next_col)
         grid_window.move_cows()
         grid_window.root.update()
-        grid_window.root.after(50)
+        grid_window.root.after(150)
         
         next_state = grid_window.get_state()
         
@@ -176,13 +184,14 @@ dqn_agent = DQNAgent(input_channels, output_size)
 # dqn_agent.policy_net.load_state_dict(loaded_state_dict)
 
 
-#train = True
-train = False
+train = True
+#train = False
 
 if train:
     initial_state, cows_pos = grid_window.get_state()
     max_episodes = 50000
     max_actions = 9000
+    i = 1
     for episode in range(max_episodes):
         print("episode: ", episode)
         state = initial_state
@@ -197,7 +206,10 @@ if train:
             
             next_row, next_col = grid_window.get_future_state(action)
             reward = grid_window.get_reward(next_row, next_col, action)
-
+            # if i == 1:
+            #     grid_window.root.update()
+            #     time.sleep(10)
+            #     i = 2
             grid_window.move_mower_abs(next_row, next_col)
             if action_counter % 5 == 0:
                 grid_window.move_cows()
@@ -229,12 +241,12 @@ if train:
             print("Testing model...")
             test_model(cows_pos)
             print("Testing model finished!")
-            torch.save(dqn_agent.policy_net.state_dict(), r'C:\Users\domin\Documents\Studium\Master\Semester_2\Achritecture_and_Planning\Architectur_Planning\dqn_5_actions\models\dqn_model_onehot_2cow-1.pth')
+            torch.save(dqn_agent.policy_net.state_dict(), r'C:\Users\domin\Documents\Studium\Master\Semester_2\Achritecture_and_Planning\Architectur_Planning\dqn_5_actions\models\dqn_model_2cow_intensor.pth')
             
 
         if keyboard.is_pressed('q'):
             print("Saving model...")
-            torch.save(dqn_agent.policy_net.state_dict(), r'C:\Users\domin\Documents\Studium\Master\Semester_2\Achritecture_and_Planning\Architectur_Planning\dqn_5_actions\models\dqn_model_onehot_2cow-1.pth')
+            torch.save(dqn_agent.policy_net.state_dict(), r'C:\Users\domin\Documents\Studium\Master\Semester_2\Achritecture_and_Planning\Architectur_Planning\dqn_5_actions\models\dqn_model_2cow_intensor.pth')
             print("Model saved!")
 
             # Speichere die Liste als JSON
@@ -244,7 +256,7 @@ if train:
 
 
 dqn_agent = DQNAgent(input_channels, output_size)
-loaded_state_dict = torch.load(r'C:\Users\domin\Documents\Studium\Master\Semester_2\Achritecture_and_Planning\Architectur_Planning\dqn_5_actions\models\dqn_model_onehot_nocow_finished_perfect.pth')
+loaded_state_dict = torch.load(r'C:\Users\domin\Documents\Studium\Master\Semester_2\Achritecture_and_Planning\Architectur_Planning\dqn_5_actions\models\dqn_model_onehot_2cow_90percent.pth')
 dqn_agent.policy_net.load_state_dict(loaded_state_dict)
 initial_state, cows_pos = grid_window.get_state()
 test_model(cows_pos)
