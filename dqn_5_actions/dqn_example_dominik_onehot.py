@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
+import torch.nn.functional as FF
+from torchinfo import summary
 import random
 from collections import namedtuple
 import tkinter as tk
@@ -16,7 +17,7 @@ n_actions = 5
 num_cows = 0
 input_size = (n_states + 4 + (2 * num_cows))  # Zustand + Positionen der Kühe
 output_size = n_actions
-coordinates = 4 + (2 * num_cows)
+length_state = 4 + (2 * num_cows)
 root = tk.Tk()
 root.title("Grid Window with Cows, Mower, and Target")
 # Erstellen des Enviroments
@@ -24,15 +25,35 @@ grid_window = GridWindow(root, rows, cols, num_cows)
 
 
 # DQN model
+# class DQN(nn.Module):
+#     def __init__(self, input_size, output_size):
+#         super(DQN, self).__init__()
+#         self.fc1 = nn.Linear(input_size, 64)
+#         self.fc2 = nn.Linear(64, output_size)
+
+#     def forward(self, x):
+#         x = FF.sigmoid(self.fc1(x))
+#         return self.fc2(x)
+    
 class DQN(nn.Module):
-    def __init__(self, input_size, output_size):
+    def __init__(self, input_channels, output_size):
         super(DQN, self).__init__()
-        self.fc1 = nn.Linear(input_size, 64)
-        self.fc2 = nn.Linear(64, output_size)
+        self.conv1 = nn.Conv2d(input_channels, 32, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
+        self.fc1 = nn.Linear(64 * 20 * 20, 128)  # Anpassen der Größe der versteckten Schicht
+        self.fc2 = nn.Linear(128, output_size)
 
     def forward(self, x):
-        x = F.relu(self.fc1(x))
+        print("#################### size ###################: ", x)
+        x = FF.relu(self.conv1(x))
+        x = FF.max_pool2d(x, 2)
+        x = FF.relu(self.conv2(x))
+        x = FF.max_pool2d(x, 2)
+        #x = x.view(x.size(0), -1)  # Flattening
+        x = FF.relu(self.fc1(x))
         return self.fc2(x)
+
+
 
 # Erfahrung wird als Transition abgepeichert -> wird für Memory gebraucht
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward', 'done'))
@@ -77,7 +98,7 @@ class DQNAgent:
             return random.randint(0, self.output_size - 1)
         else:
             with torch.no_grad():
-                state_tensor = F.one_hot(torch.tensor([state]), num_classes=rows).float().to(self.device)
+                state_tensor = FF.one_hot(torch.tensor([state]), num_classes=rows).float().to(self.device)
                 q_values = self.policy_net(state_tensor)
                 return q_values.argmax().item()
 
@@ -87,12 +108,26 @@ class DQNAgent:
             return
 
         transitions = self.memory.sample(self.batch_size)
-
+        # Korrigieren Sie die Erstellung des batch-Objekts
         batch = Transition(*zip(*transitions))
-        state_batch = F.one_hot(torch.tensor(batch.state), num_classes=rows).float().to(self.device)
+
+        state_batch = []
+        for b in batch.state:
+            state_batch.append(torch.tensor(b, dtype=torch.int64))
+        state_batch = torch.stack(state_batch).to(self.device)
+        state_batch = FF.one_hot(state_batch, num_classes=rows).float()
+
+
         action_batch = torch.tensor(batch.action, dtype=torch.int64).unsqueeze(1).to(self.device)
         reward_batch = torch.tensor(batch.reward, dtype=torch.float32).to(self.device)
-        next_state_batch = F.one_hot(torch.tensor(batch.next_state), num_classes=rows).float().to(self.device)
+ 
+        next_state_batch = []
+        for b in batch.next_state:
+            next_state_batch.append(torch.tensor(b, dtype=torch.int64))
+        next_state_batch = torch.stack(next_state_batch).to(self.device)
+        next_state_batch = FF.one_hot(next_state_batch, num_classes=rows).float() 
+ 
+        #next_state_batch = FF.one_hot(torch.tensor(batch.next_state), num_classes=rows).float().to(self.device)
         done_batch = torch.tensor(batch.done, dtype=torch.float32).to(self.device)
 
         q_values = self.policy_net(state_batch).gather(1, action_batch)
@@ -106,11 +141,13 @@ class DQNAgent:
         self.optimizer.step()
 
 
+
     def update_target_net(self):
         self.target_net.load_state_dict(self.policy_net.state_dict())
 
     def decay_epsilon(self):
         self.epsilon = max(self.min_epsilon, self.epsilon * self.epsilon_decay)
+
 
 
 n_actions = 5
@@ -126,7 +163,7 @@ train = True
 #train = False
 
 if train:
-    initial_state = grid_window.get_state(coordinates)
+    initial_state = grid_window.get_state(length_state)
     print("initial_state: ", initial_state)
     max_episodes = 50000
     max_actions = 9000
@@ -148,16 +185,18 @@ if train:
             # Erhalte zukünfitgen State welcher durch die Aktion erreicht wird
             next_row, next_col = grid_window.get_future_state(state, action)
 
-            grid_window.move_mower_abs(next_row, next_col, coordinates)
+            grid_window.move_mower_abs(next_row, next_col)
             grid_window.move_cows()
             grid_window.root.update()
             grid_window.root.after(1)
 
-            next_state = grid_window.get_state(coordinates)  # Update the state
+            next_state = grid_window.get_state(length_state)  # Update the state
             
             # One-Hot-Kodierung des Zustands
-            state_one_hot = F.one_hot(torch.tensor([state]), num_classes=rows).float().to(dqn_agent.device)
-            next_state_one_hot = F.one_hot(torch.tensor([next_state]), num_classes=rows).float().to(dqn_agent.device)
+            #state_one_hot = FF.one_hot(torch.tensor([state]), num_classes=rows).float().to(dqn_agent.device)
+            state_one_hot = FF.one_hot(torch.tensor(state).long(), num_classes=n_states).float().to(dqn_agent.device)
+
+            next_state_one_hot = FF.one_hot(torch.tensor(next_state).long(), num_classes=n_states).float().to(dqn_agent.device)
 
             # Berechne Reward basierend auf dem zukünftigen Zustand 
             reward, consecutive_unvisited_count = grid_window.get_reward(state, next_row, next_col, action, action_counter, num_cows, consecutive_unvisited_count)
@@ -167,9 +206,9 @@ if train:
             done = True if grid_window.is_90_percent_visited(state, 20, 20) is True and next_row == grid_window.target.grid_info()["row"] and next_col == grid_window.target.grid_info()["column"] else False
             visited = grid_window.is_single_field_visited(state, next_row, next_col, 20, 20)
             
-            if not (state[0] == next_row and state[1] == next_col):
-                if visited is True:
-                    done = True
+            # if not (state[0] == next_row and state[1] == next_col):
+            #     if visited is True:
+            #         done = True
 
             if action_counter >= max_actions:
                 reward += -30
@@ -212,17 +251,17 @@ def play_environment(grid_window, actions, index_to_action):
             action_index = next((index for index, act in index_to_action.items() if act == action), None)
             
             # Wähle neuen Zustand basierend auf der Aktion
-            future_row, future_col = grid_window.get_future_state(grid_window.get_state(coordinates), action_index)
+            future_row, future_col = grid_window.get_future_state(grid_window.get_state(length_state), action_index)
             
             # Bewege Rasenmäher zu neuem Zustand
-            grid_window.move_mower_abs(future_row, future_col, coordinates)
+            grid_window.move_mower_abs(future_row, future_col)
         
         grid_window.move_cows()
         grid_window.root.update()
         grid_window.root.after(500)
 
         # Überprüfe, ob alle Felder besucht und Ziel erreicht
-        if grid_window.get_state(coordinates)[-1] == 1 and grid_window.get_state(coordinates)[-2] == 1:
+        if grid_window.get_state(length_state)[-1] == 1 and grid_window.get_state(length_state)[-2] == 1:
             print("Spiel beendet! Ziel erreicht und alle Felder besucht.")
             break
 
@@ -230,7 +269,7 @@ def play_environment(grid_window, actions, index_to_action):
 
 
 #generated_actions = []
-state = grid_window.get_state(coordinates)
+state = grid_window.get_state(length_state)
 done = False
 total_reward = 0
 action_counter = 0
@@ -244,12 +283,12 @@ while not done:
     # Neuen Zustand wählen basierend auf der Aktion
     next_row, next_col = grid_window.get_future_state(state, action)
 
-    grid_window.move_mower_abs(next_row, next_col, coordinates)
+    grid_window.move_mower_abs(next_row, next_col)
     grid_window.move_cows()
     grid_window.root.update()
     grid_window.root.after(100)
     
-    next_state = grid_window.get_state(coordinates)
+    next_state = grid_window.get_state(length_state)
     
     # Alle Aktionen abspeichern
     #generated_actions.append(index_to_action[action])

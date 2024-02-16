@@ -54,7 +54,7 @@ class GridWindow:
 
         for i in range(min(self.num_cows, len(start_positions))):
             start_row, start_col = start_positions[i]
-            cow = tk.Canvas(self.root, width=20, height=20, bg="blue", highlightthickness=0)
+            cow = tk.Canvas(self.root, width=20, height=20, bg="white", highlightthickness=0)
             cow.grid(row=start_row, column=start_col)
             self.cows.append({"cow": cow, "direction": random.choice(["up", "down", "left", "right"])})
 
@@ -137,192 +137,153 @@ class GridWindow:
             if self.cells[new_row][new_col]["bg"] == "green":
                 self.cells[new_row][new_col]["bg"] = "#006400"
 
-    
-    # def move_mower_abs(self, row, col, length_state):
-    #     # Kopiere den aktuellen Zustand
-    #     current_state = self.get_state(length_state)
-
-    #     # Überprüfe, ob das Zielfeld bereits von einer Kuh besetzt ist
-    #     if any(c["cow"].grid_info()["row"] == row and c["cow"].grid_info()["column"] == col for c in self.cows):
-    #         # Wenn eine Kuh auf dem Zielfeld ist, kehre zum alten Zustand zurück und beende die Funktion
-    #         self.mower.grid(row=current_state[0], column=current_state[1])
-    #         return
-
-    #     if self.cells[row][col]["bg"] == "green":
-    #         self.cells[row][col]["bg"] = "#006400"  # Ändere die Farbe auf "dunkelgrün"
-
-    #     # Setze den Rasenmäher auf das Zielzellenfeld
-    #     self.mower.grid(row=row, column=col)
-
-    # def move_mower_abs(self, row, col, length_state):
-    #     # Prüfe, ob die nächste Position gültig ist
-    #     if 0 <= row < self.rows and 0 <= col < self.cols:
-    #         # Überprüfe, ob das Feld bereits besucht wurde
-    #         if self.cells[row.item()][col.item()]["bg"] == "green":
-    #             # Setze die Hintergrundfarbe des aktuellen Feldes auf "green"
-    #             current_row, current_col = length_state[0].item(), length_state[1].item()
-    #             self.cells[current_row][current_col]["bg"] = "green"
-
-    #             # Setze die Hintergrundfarbe des Zielfeldes auf "#006400"
-    #             self.cells[self.target.grid_info()["row"]][self.target.grid_info()["column"]]["bg"] = "#006400"
-
-    #             # Setze die Hintergrundfarbe des neuen Feldes auf "#FFFF00"
-    #             self.cells[row.item()][col.item()]["bg"] = "#FFFF00"
-
-    #             # Setze die Position des Rasenmähers auf das neue Feld
-    #             self.mower.grid(row=row.item(), column=col.item())
-
 
     def move_mower_abs(self, row, col):
         # Prüfe, ob die nächste Position gültig ist
         if 0 <= row < self.rows and 0 <= col < self.cols:
-            # Überprüfe, ob das Feld bereits besucht wurde
-            if self.cells[int(row)][int(col)]["bg"] == "green":  # Hier werden die Float-Werte in Integer konvertiert
-                # Setze die Hintergrundfarbe des aktuellen Feldes auf "green"
-                current_row, current_col = self.mower.grid_info()["row"], self.mower.grid_info()["column"]
-                self.cells[current_row][current_col]["bg"] = "green"
+            current_row, current_col = self.mower.grid_info()["row"], self.mower.grid_info()["column"]
+            
+            self.cows
 
-                # Setze die Hintergrundfarbe des Zielfeldes auf "#006400"
-                self.cells[self.target.grid_info()["row"]][self.target.grid_info()["column"]]["bg"] = "#006400"
+            if self.cells[row][col]["bg"] == "green":
+                self.cells[row][col]["bg"] = "#006400"  # Ändere die Farbe auf "dunkelgrün"
 
-                # Setze die Hintergrundfarbe des neuen Feldes auf "#FFFF00"
-                self.cells[int(row)][int(col)]["bg"] = "#FFFF00"
+            # überprüfe ob auf dem Feld schon eine kuh steht, falls ja bleibt der rasenmäher auf dem gleichen feld stehen
+            for cow in self.cows:
+                cow_row = cow["cow"].grid_info()["row"]
+                cow_col = cow["cow"].grid_info()["column"]
+                if (row == cow_row) and (col == cow_col):
+                    row = current_row
+                    col = current_col
 
-                # Setze die Position des Rasenmähers auf das neue Feld
-                self.mower.grid(row=int(row), column=int(col))
+            # Setze die Position des Rasenmähers auf das neue Feld
+            self.mower.grid(row=int(row), column=int(col))
 
 
 
 
-    def get_state(self, length_state):
-        state = []
+    def get_state(self):
 
-        # Füge Positionen des Rasenmähers, der Kühe und des Ziels hinzu
-        state.extend([self.mower.grid_info()["row"], self.mower.grid_info()["column"]])
-        for cow in self.cows:
-            state.extend([cow["cow"].grid_info()["row"], cow["cow"].grid_info()["column"]])
-        state.extend([self.target.grid_info()["row"], self.target.grid_info()["column"]])
+        tensor = torch.zeros(self.rows, self.cols, 2)
+        #tensor = torch.zeros(self.rows *2, self.cols)
+        mower_row = self.mower.grid_info()["row"]
+        mower_col = self.mower.grid_info()["column"]
         
+        # Setze 1 für Rasenmäherposition
+        tensor[mower_row, mower_col, 0] = 1
+        #tensor[mower_row, mower_col] = 1
+        
+        cows_row = []
+        cows_col = []
+        for cow in self.cows:
+            cow_row = cow["cow"].grid_info()["row"]
+            cow_col = cow["cow"].grid_info()["column"]
+            cows_row.append(cow_row)
+            cows_col.append(cow_col)
+            # Setze 1 für Kuhpositionen
+            #tensor[cow_row, cow_col, 0] = 2
+            #tensor[cow_row, cow_col] = 1
+        
+        cows_pos = torch.tensor([cows_row, cows_col])
+
+        target_row = self.target.grid_info()["row"]
+        target_col = self.target.grid_info()["column"]
+        # Setze 1 für Zielposition
+        #tensor[target_row, target_col, 0] = 1
+        #tensor[target_row, target_col] = 1
+               
         # Füge den Besuchsstatus der Felder hinzu
         for row in range(self.rows):
             for col in range(self.cols):
                 if self.cells[row][col]["bg"] == "#006400":
-                    state.append(1)  # Besucht
-                else:
-                    state.append(0)  # Nicht besucht
+                    tensor[row, col, 1] = 1
 
-        # Konvertiere die Liste in einen Tensor und wende die One-Hot-Kodierung an
-        state_tensor = torch.tensor(state[:length_state])
-        
-        field_states_tensor = torch.tensor(state[length_state:])
-        state_one_hot = FF.one_hot(state_tensor.long(), num_classes=self.rows).float()
+        return tensor, cows_pos
 
-        state_one_hot = state_one_hot.view((1+1+self.num_cows)*2*self.cols)
-        state_tensor = torch.cat((state_one_hot, field_states_tensor))
-        print("state_tensor: ", state_tensor)
-        return state_tensor
 
-    def get_future_state(self, current_state, action):
+    def get_future_state(self, action):
         # {0: 'Up', 1: 'Down', 2: 'Left', 3: 'Right', 4: 'Stay'}
-        row = current_state[0]
-        col = current_state[1]
+        
+        mower_row = self.mower.grid_info()["row"]
+        mower_col = self.mower.grid_info()["column"]        
+        temp_row = self.mower.grid_info()["row"]
+        temp_col = self.mower.grid_info()["column"] 
+
 
         if action == 0:  # Move Up
-            row = max(0, row - 1)
+            mower_row = max(0, mower_row - 1)
         elif action == 1:  # Move Down
-            row = min(self.rows - 1, row + 1)
+            mower_row = min(self.rows - 1, mower_row + 1)
         elif action == 2:  # Move Left
-            col = max(0, col - 1)
+            mower_col = max(0, mower_col - 1)
         elif action == 3:  # Move Right
-            col = min(self.cols - 1, col + 1)
+            mower_col = min(self.cols - 1, mower_col + 1)
         # Bei der Aktion 4 ('Stay') bleibt der Rasenmäher auf dem aktuellen Feld stehen.
+        
+        if (mower_row == self.target.grid_info()["row"]) and (mower_col == self.target.grid_info()["column"]) and (temp_row == 13) and (temp_col == 14):
+            mower_row = temp_row
+            mower_col = temp_col
+        # # Falls sich eine kuh auf dem momentanen feld befindet, bleibt der mäher da stehen wo er ist
+        # for cow in self.cows:
+        #     cow_row = cow["cow"].grid_info()["row"]
+        #     cow_col = cow["cow"].grid_info()["column"]
+        #     if (mower_row == cow_row) and (mower_col == cow_col):
+        #         mower_row = row_tmp
+        #         mower_col = col_tmp
 
-        return row, col
+        return mower_row, mower_col
 
 
-    def get_reward(self, state, future_row, future_col, action, action_counter, num_cows, consecutive_unvisited_count):
+    def get_reward(self, future_row, future_col, action):
         reward = 0
-        row_cow = []
-        col_cow = []
 
-        row = state[0]
-        col = state[1]
+        mower_row = self.mower.grid_info()["row"]
+        mower_col = self.mower.grid_info()["column"]
+        
+        # überprüfe ob die nächste position mit einer kuh kollidieren würde
+        cows_row = []
+        cows_col = []
+        for cow in self.cows:
+            cow_row = cow["cow"].grid_info()["row"]
+            cow_col = cow["cow"].grid_info()["column"]
+            if (future_row == cow_row) and (future_col == cow_col):
+                reward -= 1
 
-        row_cow = []
-        col_cow = []
-
-        row = state[0]
-        col = state[1]
-
-
-
-        for i in range(2, len(state) - 2, 2):
-            row_cow.append(state[i])
-            col_cow.append(state[i + 1])
-        # [position of mower row, position of mower col, position of cow1 row, position of cow1 col, position of cow2 row, position of cow2 col, position of cow3 row, position of cow3 col, position of cow4 row, position of cow4 col, position of cow5 row, position of cow5 col, 1 if we have visitied this field and 0 if not ]
-        # state = [mower_row, mower_col, cow1_row, cow1_col, cow2_row, cow2_col, ..., target_row, target_col, 0, 1, 0, 1, ...]
-
-        if (future_row, future_col) in zip(row_cow, col_cow):
-            reward += -5
-
-        visited_status = state[-(self.rows * self.cols):]
-
-        if not (state[0] == future_row and state[1] == future_col):
-            # Überprüfe, ob das Feld an der Position des Rasenmähers besucht wurde
-            if visited_status[int(future_row) * self.cols + int(future_col)] == 1:
-                reward += -5
-                consecutive_unvisited_count = 0
+        if not((mower_row == future_row) and (mower_col == future_col) and (action ==  4)):
+            if self.cells[future_row][future_col]["bg"] == "#006400": 
+                reward -= 1
             else:
-                if action == 2 or action == 3:
-                    reward += 10
+                if (action == 2) or (action == 3):
+                    reward += 2
+
+                if (action == 3) and (not(mower_row % 2)):
+                    reward += 15
+                elif (action == 2) and (mower_row % 2):
+                    reward += 15
                 else:
                     reward += 5
-                reward += calculate_exponential_reward(self.cols, state, future_row, future_col, visited_status)
-                # Erhöhe den Status der aufeinanderfolgenden unbesuchten Felder
-                consecutive_unvisited_count += 1
-                if row % 2 != 0:
-                    if row == future_row and col + 1 == future_col:
-                        reward += 20
-                else:
-                    if row == future_row and col - 1 == future_col:
-                        reward += 20
-
-
-
                         
-        positionen = 2 + (2 * num_cows)
-        alle_besucht = all(state[positionen:])
 
-        if alle_besucht is True:
-            reward += 100
-        if self.is_90_percent_visited(state, self.rows, self.cols):
-            if row == self.target.grid_info()["row"] and col == self.target.grid_info()["column"]:
+        visited_feld_counter = 0
+        # Füge den Besuchsstatus der Felder hinzu
+        for row in range(self.rows):
+            for col in range(self.cols):
+                if self.cells[row][col]["bg"] == "#006400":
+                    visited_feld_counter += 1
 
-                base_reward = 10
-                max_multiplier = 30
-                multiplier_threshold = 1000
-
-                # Berechnen Sie den Multiplikator basierend auf dem action_counter
-                multiplier = max(1, max_multiplier - (action_counter / multiplier_threshold))
-
-                # Berechnen Sie den endgültigen Reward
-                reward += base_reward * multiplier
-                print("reward: ", reward)
-
-
-        # # Belohne, wenn der Roboter eine Zeile nach der anderen abfährt
-        # if action == 3 and col == self.cols - 1:
-        #     # Überprüfe, ob alle Felder in der aktuellen Zeile abgefahren wurden
-        #     if all(visited_status[row * self.cols : (row + 1) * self.cols]):
-        #         reward += 500  # Belohne das vollständige Abfahren der aktuellen Zeile
-        # elif action == 2 and col == 0:
-        #     # Überprüfe, ob alle Felder in der aktuellen Zeile abgefahren wurden
-        #     if all(visited_status[row * self.cols : (row + 1) * self.cols]):
-        #         reward += 500  # Belohne das vollständige Abfahren der aktuellen Zeile
-
-
-        return reward, consecutive_unvisited_count
     
+        target_row = self.target.grid_info()["row"]
+        target_col = self.target.grid_info()["column"]
+
+        #if (future_row == target_row) and (future_col == target_col) and (visited_feld_counter > (int(0.5 * (self.rows * self.cols)))):
+        if (future_row == target_row) and (future_col == target_col) and (action == 3):
+            print("Geschafft!")
+            reward += 30
+            #reward += visited_feld_counter * 0.01
+        return reward
+
+
+
 
     def reset_green_fields(self):
         for row in range(self.rows):
@@ -332,21 +293,22 @@ class GridWindow:
         self.cells[0][0]["bg"] = "#006400"
 
 
-    def reset_to_initial_state(self, initial_state):
+    def reset_to_initial_state(self, pos_cows):
         # Setze die Hintergrundfarbe aller Felder auf "green"
         for row in range(self.rows):
             for col in range(self.cols):
                 self.cells[row][col]["bg"] = "green"
         self.cells[0][0]["bg"] = "#006400"
 
-        # Setze die Positionen der Kühe zurück
-        cow_positions = initial_state[:self.num_cows*2]
-        for cow, cow_position in zip(self.cows, cow_positions):
-            cow["cow"].grid(row=int(cow_position.item()), column=int(cow_positions[cow_position + 1].item()))
+        
+        i = 0
+        for cow in self.cows:
+            cow["cow"].grid(row=pos_cows[0, i].item(), column=pos_cows[1, i].item())
+            i += 1
 
-        # Setze die Position des Rasenmähers zurück
-        mower_position = initial_state[self.num_cows*2:self.num_cows*2 + 2]
-        self.mower.grid(row=int(mower_position[0].item()), column=int(mower_position[1].item()))
+
+        self.mower.grid(row=0, column=0)
+        #self.target.grid(row=self.rows, column=self.cols)
 
 
 
@@ -378,6 +340,8 @@ class GridWindow:
 
         # Überprüfe, ob 90% oder mehr der Felder besucht wurden
         return visited_count >= 0.9 * total_fields
+    
+
         
 def calculate_exponential_reward(cols, state, future_row, future_col, visited_status):
     # Überprüfe, ob der Rasenmäher auf ein Feld bewegt wurde, das bereits besucht wurde
@@ -414,8 +378,8 @@ def main():
     root = tk.Tk()
     root.title("Grid Window with Cows, Mower, and Target")
     
-    rows = 20
-    cols = 20
+    rows = 15
+    cols = 15
     num_cows = 5
 
     grid_window = GridWindow(root, rows, cols, num_cows)

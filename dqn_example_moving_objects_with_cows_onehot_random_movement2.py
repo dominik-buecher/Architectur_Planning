@@ -568,7 +568,7 @@ class PathFinder():
                         )
                         state_batch.append(state_tensor.numpy())
                     state_batch = torch.tensor(state_batch, dtype=torch.float32)
-
+                    print("state_tensor.numpy(): ", state_tensor.numpy())
                     # print(state_batch)
 
                     # list(get_coord_from_state(state)) + 
