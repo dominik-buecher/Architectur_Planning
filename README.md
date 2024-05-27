@@ -1,0 +1,1 @@
+This project was undertaken as part of the Autonomous Systems: Architecture and Planning program. It focuses on training a reinforcement learning agent to efficiently navigate a lawnmower across a meadow. The goal is for the agent to cover the entire field in the shortest possible time while avoiding collisions with any cows or sheep.
